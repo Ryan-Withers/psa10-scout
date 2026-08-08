@@ -226,9 +226,29 @@ function toValueRows(store, fx, now = Date.now()) {
 
 /* ---------- hand-entered values ---------- */
 
+/**
+ * A row only becomes a value if it carries a real price.
+ *
+ * my-values-TOFILL.json is a worksheet of 30 cards with the prices left blank,
+ * and it is meant to be filled in a few at a time. Without this guard a blank
+ * row still became a comp, at psa10UsdCents 0: matched at high confidence,
+ * priced the card at $0, produced a NaN edge and a NaN score, and printed
+ * "$NaN landed" into the written call. Worse, because a comp did match, the
+ * comparable-pool fallback in score.js never ran, so the card lost the
+ * valuation it would otherwise have had. Every half-filled worksheet quietly
+ * blinded the tool on exactly the cards Ryan cares most about.
+ *
+ * Non-numeric and negative prices go the same way, for the same reason.
+ */
+const hasPrice = (r) => {
+  const n = Number(r.psa10Usd);
+  return Number.isFinite(n) && n > 0;
+};
+
 function handValueRows(myValues) {
   return (myValues.rows || [])
     .filter((r) => !/^_/.test(String(r.player || '')))
+    .filter(hasPrice)
     .map((r, i) => ({
       id: `you:${i}`,
       valueSource: 'you',

@@ -13,14 +13,9 @@
     "reviewed": "Date you last checked this value. The tool warns when a value goes stale."
   },
 
-  "_note": "The rows below are examples using invented prices, same as the rest of the placeholder data. Replace them.",
+  "_note": "Empty on purpose. This file used to ship six example rows with invented prices, and because your numbers outrank everything inferred, those inventions were being used as truth on every live scan. A wrong number here does more damage than no number at all. Fill it from data/my-values-TOFILL.json as you work out real values.",
 
-  "rows": [
-    { "year": 2020, "set": "contenders", "insert": "rookie ticket", "parallel": null, "player": "Justin Herbert", "cardNo": "101", "serialOf": null, "psa10Usd": 550, "reviewed": "2026-07-29" },
-    { "year": 2021, "set": "donruss optic", "insert": "rookie auto", "parallel": "holo", "player": "Ja'Marr Chase", "cardNo": null, "serialOf": null, "psa10Usd": 900, "reviewed": "2026-07-29" },
-    { "year": 2023, "set": "prizm", "insert": "rookie auto", "parallel": "silver", "player": "Bryce Young", "cardNo": "RA-BY", "serialOf": null, "psa10Usd": 180, "reviewed": "2026-07-29" },
-    { "year": 2016, "set": "contenders", "insert": "rookie ticket", "parallel": null, "player": "Michael Thomas", "cardNo": null, "serialOf": null, "psa10Usd": 210, "reviewed": "2026-07-29" },
-    { "year": 2022, "set": "mosaic", "insert": "rookie auto", "parallel": "green", "player": "Brock Purdy", "cardNo": "RA-BP", "serialOf": null, "psa10Usd": 260, "reviewed": "2026-07-29" },
-    { "year": 2020, "set": "contenders optic", "insert": "rookie ticket", "parallel": null, "player": "Justin Jefferson", "cardNo": null, "serialOf": null, "psa10Usd": 1100, "reviewed": "2026-07-29" }
-  ]
+  "_example": { "year": 2023, "set": "prizm", "insert": "rookie auto", "parallel": "silver", "player": "Example Player", "cardNo": "RA-EP", "serialOf": null, "psa10Usd": 180, "reviewed": "2026-08-08" },
+
+  "rows": []
 }

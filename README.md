@@ -20,8 +20,10 @@ nothing running on your machine.
    charges when the seller is overseas.
 4. **Write a call.** STRONG BUY down to SKIP, with a sentence saying why, in
    terms you can check against the row.
-5. **Email the good ones.** Once each. A card only comes round again if its
-   call improves.
+5. **Email the ones worth seeing.** Three reasons earn a place: one of your
+   named targets is listed at all, the card is a genuine deal, or it fits the
+   profile you are hunting (first or second year, PSA 10, asking under $200).
+   Once each. A card only comes round again if its call improves.
 
 ## What it is looking for
 
@@ -34,7 +36,7 @@ player is elite and early career, or the discount is extreme.
 
 | File | What it is |
 | --- | --- |
-| `data/my-players.json` | Players you rate. Multiplies their score. |
+| `data/my-players.json` | Players you rate. Multiplies their score. Set `alwaysAlert` to hear about one every time, whatever the price. |
 | `data/my-values.json` | Cards you know the price of. Trusted over everything else. |
 | `data/my-values-TOFILL.json` | 30 commonly listed cards with the prices left blank. A worksheet. |
 | `data/known-cards.json` | Cards for the sanity check. |

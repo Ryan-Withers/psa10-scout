@@ -154,6 +154,20 @@ const { notify } = require('./notify');
 
   console.log('\n  calls: ' + Object.entries(buys.reduce((a, r) => { a[r.verdict.call] = (a[r.verdict.call] || 0) + 1; return a; }, {})).map(([k, v]) => k + ' ' + v).join('   '));
 
+  /**
+   * How many cards each alert reason pulled in, before the per-section caps
+   * and before the already-emailed filter. Printed because PROFILE is the one
+   * rule here with no discount test and no rank test, so it is the one that
+   * could quietly match hundreds of listings a sweep. If this line reads
+   * PROFILE 300 on a live run, the rule wants tightening in config, not the
+   * email cap raising.
+   */
+  const reasonTally = [...buys, ...look].reduce((a, r) => {
+    for (const why of r.verdict?.reasons || []) a[why] = (a[why] || 0) + 1;
+    return a;
+  }, {});
+  console.log('  alertable: ' + (Object.entries(reasonTally).map(([k, v]) => k + ' ' + v).join('   ') || 'none'));
+
   console.log(`\nIGNORED (${ignored.length})`);
   const why = {};
   for (const d of ignored) { const k = String(d.dropped).split(':')[1] || d.dropped; why[k] = (why[k] || 0) + 1; }
@@ -167,8 +181,18 @@ const { notify } = require('./notify');
    * Last, deliberately. Everything above is written to disk before anything
    * is sent, so a Resend outage costs an email and not the scan.
    */
+  /**
+   * Unpriced cards are normally left out of the email: with no value there is
+   * no call to make and the "worth a look" pile is a report, not an alert.
+   * Named targets are the exception. Ryan asked to hear about those men every
+   * time, and a listing the tool could not value is the one he most needs to
+   * eyeball himself. Same for a card that fits the profile, which is judged on
+   * age, grade and asking price and needs no valuation at all.
+   */
+  const alsoAlertable = look.filter((r) => (r.verdict?.reasons || []).length > 0);
+
   try {
-    const r = await notify(buys, {
+    const r = await notify([...buys, ...alsoAlertable], {
       placeholder: P.SOURCE !== 'live',
       dryRun: process.env.ALERT_DRY_RUN === '1',
     });
@@ -176,7 +200,7 @@ const { notify } = require('./notify');
     // is public. Actions masks exact secret values, but not derivatives, and
     // an address has no business in a public log either way.
     console.log(r.sent
-      ? `\nemailed: ${r.subject}  (${r.act} to act on, ${r.also} also solid)`
+      ? `\nemailed: ${r.subject}  (${r.act} to act on, ${r.also} also solid, ${r.targets} targets, ${r.profile} profile)`
       : `\nno email: ${r.reason}${r.would ? ` (${r.would} would have gone)` : ''}`);
   } catch (e) {
     // Never fatal. The scan succeeded and the price history is already saved.

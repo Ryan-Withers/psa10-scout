@@ -79,6 +79,32 @@ card eventually counts as a sale and inflates the cleared-price medians.
 is for readability. Marking only the shown ten turns it into a queue that
 drip-feeds the rest of the list on later runs.
 
+**`verdict.reasons` is the only definition of what earns an email.** Three
+reasons: `TARGET` (a player flagged `alwaysAlert` in `my-players.json`, at any
+call, including unpriced), `DEAL` (the old bar, shout or BUY), `PROFILE`
+(first or second year, PSA 10, asking under `maxAskUsd`, no discount test).
+`notify.js` and `alert.js` both read that array. Restating the bar as a
+threshold in either is how the two drift apart and cards get marked sent
+without being shown.
+
+**Anything reaching the email can now be priced above the market.** `hook()`
+and the alert copy used to hardcode the word "under" next to the edge, which
+was safe while only buys were emailed. Targets and profile cards arrive at any
+call. Telling Ryan a card is cheap when it is 9% over is how he stops
+believing the rest of the email.
+
+**A hand-entered value needs a real price to count.** `handValueRows` drops
+any row whose `psa10Usd` is not a positive number. `my-values-TOFILL.json` is
+a 30 card worksheet meant to be filled a few at a time, and a blank row that
+reaches the value index prices its card at $0, matches it at high confidence,
+scores it NaN, and skips the comparable-pool fallback that would have valued
+it. The card is silently binned and it looks like ordinary PASS traffic.
+
+**Never put a value you are not sure of in `my-values.json`.** Your numbers
+outrank everything inferred, so a wrong one there does more damage than no
+number at all. The file shipped six invented example prices for a while and
+they were being used as truth on live scans.
+
 **Never persist seller usernames.** `market.js` hashes them via `sellerKey`.
 Only used to count distinct sellers. This keeps the eBay account-deletion
 exemption honest. Do not carry the username into scored output.

@@ -98,7 +98,14 @@ let CONVICTION = new Map();
 function setConviction(rows = []) {
   CONVICTION = new Map(
     rows.filter((r) => r.player)
-      .map((r) => [normPlayer(r.player), { mult: Number(r.conviction) || 1, note: r.note || '' }])
+      .map((r) => [normPlayer(r.player), {
+        mult: Number(r.conviction) || 1,
+        note: r.note || '',
+        // Whether to email every listing of this man regardless of the call.
+        // Kept apart from the multiplier on purpose: liking a player and
+        // wanting to be interrupted about him are different questions.
+        alwaysAlert: r.alwaysAlert === true,
+      }])
   );
 }
 const normPlayer = (s) => String(s || '').toLowerCase()
@@ -107,7 +114,7 @@ const normPlayer = (s) => String(s || '').toLowerCase()
   .replace(/[^a-z0-9]+/g, ' ').trim();
 
 function conviction(player) {
-  return CONVICTION.get(normPlayer(player)) || { mult: 1, note: '' };
+  return CONVICTION.get(normPlayer(player)) || { mult: 1, note: '', alwaysAlert: false };
 }
 
 function sellerTrust(feedbackPct, feedbackScore) {
@@ -141,6 +148,13 @@ function scoreListing(listing, parsed, match, fx, comparePools = null) {
     parseConfidence: parsed.confidence, matchConfidence: match.matchConfidence,
     warnings: [...(parsed.warnings || [])],
     dropped: null,
+    // Set here rather than in one of the branches below, because both feed
+    // alerting and scoreListing has five different exits. A card that cannot
+    // be valued still has an asking price and can still be one of your men.
+    alwaysAlert: conviction(parsed.player).alwaysAlert,
+    askUsd: round2(listing.currency === 'AUD'
+      ? listing.price / (fx.usdToAud || 1)
+      : listing.price),
   };
 
   // Failed the gates. Not a card, or not readable. Genuinely thrown away.

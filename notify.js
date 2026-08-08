@@ -31,7 +31,12 @@ const REMEMBER_DAYS = 90;
 
 // The bar for being worth an email at all. Kept in step with selectAlerts,
 // which picks from exactly this population.
-const worthEmailing = (r) => !!r.verdict?.shout || r.verdict?.call === 'BUY';
+//
+// verdict.reasons is the single definition of that bar: a named target at any
+// call, a good deal, or a card fitting the profile. Restating it as a
+// threshold here is how the two drift apart, so this just asks whether the
+// card has a reason at all.
+const worthEmailing = (r) => (r.verdict?.reasons || []).length > 0;
 
 /* ---------- the record of what has been sent ---------- */
 
@@ -111,7 +116,7 @@ async function notify(buys, { placeholder = false, dryRun = false } = {}) {
    */
   const candidates = news.filter(worthEmailing);
   const selection = selectAlerts(news);
-  const shown = [...selection.act, ...selection.also];
+  const shown = [...selection.act, ...selection.also, ...selection.targets, ...selection.profile];
 
   if (!shown.length) {
     return { sent: 0, reason: news.length ? 'nothing met the bar' : 'nothing new since last scan' };
@@ -146,6 +151,7 @@ async function notify(buys, { placeholder = false, dryRun = false } = {}) {
   return {
     sent: shown.length, trimmed, subject: mail.subject, to,
     act: selection.act.length, also: selection.also.length,
+    targets: selection.targets.length, profile: selection.profile.length,
   };
 }
 
