@@ -144,6 +144,9 @@ function scoreListing(listing, parsed, match, fx, comparePools = null) {
     insert: parsed.insert, parallel: parsed.parallel,
     // Carried through so the alert can say "2nd year WR" instead of a score.
     pos: parsed.pos, exp: parsed.exp, age: parsed.age,
+    // Carried for the profile rule, which needs proof the man is on a current
+    // roster. Sleeper's experience alone reports 0 for the retired.
+    team: parsed.team,
     dynRank: parsed.dynRank, dynTrend30: parsed.dynTrend30,
     parseConfidence: parsed.confidence, matchConfidence: match.matchConfidence,
     warnings: [...(parsed.warnings || [])],

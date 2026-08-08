@@ -97,12 +97,26 @@ function selectAlerts(rows) {
     });
   };
 
-  const act = bestPerPlayer(rows.filter((r) => r.verdict?.shout).sort(byCall));
+  /**
+   * Cap first, then exclude.
+   *
+   * This order matters and getting it wrong cost a real card. The exclusion
+   * set used to be built from the uncapped act and also lists, which are then
+   * sliced to maxPerEmail. A named target sitting at act position 11 was
+   * therefore excluded from the targets section for being "already shown",
+   * cut from act by the slice, displayed nowhere, and marked as emailed. The
+   * one card the whole feature exists to surface was the one it swallowed.
+   *
+   * Building the set from what is actually rendered means a card cut by one
+   * section's cap falls through to the next section it qualifies for.
+   */
+  const act = bestPerPlayer(rows.filter((r) => r.verdict?.shout).sort(byCall))
+    .slice(0, A.maxPerEmail);
   const actNames = new Set(act.map(name));
   const also = bestPerPlayer(
     rows.filter((r) => !r.verdict?.shout && r.verdict?.call === 'BUY' && !actNames.has(name(r)))
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-  );
+  ).slice(0, Math.max(0, Math.min(5, A.maxPerEmail - act.length)));
 
   const shown = new Set([...act, ...also].map((r) => r.itemId));
 
@@ -113,20 +127,26 @@ function selectAlerts(rows) {
    */
   const targets = rows
     .filter((r) => has(r, 'TARGET') && !shown.has(r.itemId))
-    .sort(byCall);
+    .sort(byCall)
+    .slice(0, A.maxTargets);
   targets.forEach((r) => shown.add(r.itemId));
 
+  /**
+   * Best player first, not cheapest first.
+   *
+   * Sorting by price put the eight cheapest cards in the sweep at the top,
+   * and with no discount test the cheapest first-or-second-year PSA 10 autos
+   * are by definition the men nobody rates. The section read as a junk drawer.
+   * Ranking by dynasty standing means that if the cap does bite, what it drops
+   * is the least interesting rather than the least cheap.
+   */
   const profile = bestPerPlayer(
     rows.filter((r) => has(r, 'PROFILE') && !shown.has(r.itemId))
-      .sort((a, b) => (a.landedAud ?? 1e9) - (b.landedAud ?? 1e9))
-  );
+      .sort((a, b) => (a.dynRank ?? 1e9) - (b.dynRank ?? 1e9)
+        || (a.landedAud ?? 1e9) - (b.landedAud ?? 1e9))
+  ).slice(0, A.maxProfile);
 
-  return {
-    act: act.slice(0, A.maxPerEmail),
-    also: also.slice(0, Math.max(0, A.maxPerEmail - Math.min(act.length, A.maxPerEmail))).slice(0, 5),
-    targets: targets.slice(0, A.maxTargets),
-    profile: profile.slice(0, A.maxProfile),
-  };
+  return { act, also, targets, profile };
 }
 
 /* ---------- one card ---------- */
@@ -149,13 +169,23 @@ const CALL_COLOUR = {
  * market wants. Reading it takes no effort, which is the whole point.
  */
 function priceBar(landed, comp) {
-  if (!(comp > 0)) return '';
+  if (!(comp > 0) || !(landed > 0)) return '';
+
+  /**
+   * Over-market cards reach the email now, and the bar was only ever asked to
+   * draw a bargain. Clamped at 100%, a card 125% over the going rate rendered
+   * as a completely full bar in the STRONG BUY green: the worse the deal, the
+   * better it looked. Above the comp the bar flips to red and fills, which
+   * reads as "past the line" rather than "maximum value".
+   */
+  const over = landed > comp;
+  const colour = over ? '#b04a4a' : '#0a7d4a';
   const paid = Math.max(6, Math.min(100, Math.round((landed / comp) * 100)));
   const rest = 100 - paid;
   return `<table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;margin:2px 0 8px">
 <tr>
-  <td width="${paid}%" style="height:9px;background:#0a7d4a;border-radius:5px 0 0 5px;font-size:0;line-height:0">&nbsp;</td>
-  <td width="${rest}%" style="height:9px;background:#e6e4df;border-radius:0 5px 5px 0;font-size:0;line-height:0">&nbsp;</td>
+  <td width="${paid}%" style="height:9px;background:${colour};border-radius:5px 0 0 5px;font-size:0;line-height:0">&nbsp;</td>
+  ${rest > 0 ? `<td width="${rest}%" style="height:9px;background:#e6e4df;border-radius:0 5px 5px 0;font-size:0;line-height:0">&nbsp;</td>` : ''}
 </tr></table>`;
 }
 
@@ -234,22 +264,21 @@ function describe(r) {
 
 /* ---------- subject ---------- */
 
+/**
+ * Ordered by how much the run deserves interrupting for, strongest first.
+ *
+ * The targets branch used to sit above both act branches, which meant one
+ * Burden listing the tool rated PASS took the subject line off ten STRONG
+ * BUYs. A named man merely being listed is the weakest thing in the email, not
+ * the strongest, so it now sits below the deals and above nothing else.
+ */
 function subject({ act, also, targets: named = [], profile = [] }) {
   if (!act.length && !also.length && !named.length && !profile.length) return 'Nothing worth flagging';
-  const targets = act.filter((r) => (r.verdict?.tags || []).includes('TARGET'));
-  if (targets.length) {
-    const t = targets[0];
+
+  const targetsInAct = act.filter((r) => (r.verdict?.tags || []).includes('TARGET'));
+  if (targetsInAct.length) {
+    const t = targetsInAct[0];
     return `${t.player} at ${vsMarket(t.edge)}, one of yours`;
-  }
-  // One of your men is listed, even though the price is nothing special. Say
-  // whose and what it costs rather than implying a bargain.
-  if (named.length) {
-    const t = named[0];
-    const cheapest = named.map((r) => r.landedAud).filter((n) => n > 0);
-    if (named.length > 1 && cheapest.length) return `${named.length} of your guys listed, from ${money(Math.min(...cheapest))}`;
-    return t.landedAud > 0
-      ? `${t.player} listed at ${money(t.landedAud)} landed`
-      : `${t.player} is listed`;
   }
   if (act.length === 1) {
     const r = act[0];
@@ -259,8 +288,31 @@ function subject({ act, also, targets: named = [], profile = [] }) {
     const best = act[0];
     return `${act.length} to look at, best is ${best.player} at ${vsMarket(best.edge)}`;
   }
-  if (also.length) return `${also.length} solid buys, nothing urgent`;
-  return `${profile.length} young PSA 10 auto${profile.length === 1 ? '' : 's'} under $${CFG.alert.reasons.profile.maxAskUsd}`;
+  if (also.length) return `${also.length} solid buy${also.length === 1 ? '' : 's'}, nothing urgent`;
+
+  // One of your men is listed and the price is nothing special. Count PEOPLE,
+  // not listings: the targets bucket deliberately holds every card, so six
+  // Burden autos were reading as "6 of your guys" when he has named two.
+  if (named.length) {
+    const men = [...new Set(named.map((r) => String(r.player || '')))];
+    const cheapest = named.map((r) => r.landedAud).filter((n) => n > 0);
+    if (men.length > 1) {
+      return cheapest.length
+        ? `${men.length} of your guys listed, from ${money(Math.min(...cheapest))}`
+        : `${men.length} of your guys listed`;
+    }
+    const one = named[0];
+    if (named.length > 1) {
+      return cheapest.length
+        ? `${named.length} ${men[0]} cards listed, from ${money(Math.min(...cheapest))}`
+        : `${named.length} ${men[0]} cards listed`;
+    }
+    return one.landedAud > 0
+      ? `${men[0]} listed at ${money(one.landedAud)} landed`
+      : `${men[0]} is listed`;
+  }
+
+  return `${profile.length} young PSA 10 auto${profile.length === 1 ? '' : 's'} asking under $${CFG.alert.reasons.profile.maxAskUsd} USD`;
 }
 
 /* ---------- render ---------- */
@@ -274,13 +326,37 @@ function buildAlert(selection, { placeholder = false, trimmed = 0 } = {}) {
   // Said plainly, because these two sections are not claims that the card is
   // cheap. One is "he is listed", the other is "this is your shape of card".
   const targetsWhy = 'Listed now, whatever the price. You asked to hear about these every time.';
-  const profileWhy = `First and second year, PSA 10, asking under $${P.maxAskUsd} USD. Not judged on discount.`;
+  const profileWhy = `First and second year, PSA 10, asking under $${P.maxAskUsd} USD before postage. Not judged on discount.`;
+
+  /**
+   * The old strapline said every card below was under what comparable cards
+   * ask. That was true while only buys were emailed. Targets and profile cards
+   * arrive at any call, so on a run carrying either, the sentence was a claim
+   * the email itself disproved two inches further down.
+   */
+  const onlyDeals = !targets.length && !profile.length;
+  const strapline = onlyDeals
+    ? 'PSA 10 and 9 NFL autos, landed in Australia, under what comparable cards ask'
+    : 'PSA 10 and 9 NFL autos, landed in Australia. Not all of these are cheap, see each call.';
+
+  // Counts men, not listings. The targets bucket holds one row per card.
+  const namedMen = [...new Set(targets.map((r) => String(r.player || '')))];
+  const headline = act.length ? `${act.length} worth acting on`
+    : namedMen.length ? `${namedMen.length} of your guys listed`
+    : profile.length ? `${profile.length} fit your profile`
+    : 'Nothing urgent';
 
   // Cards that cleared the bar but did not fit. Said out loud rather than
   // silently dropped, because on a first run the backlog can be large and
   // you should know the email is a top slice, not the whole answer.
   const more = trimmed > 0
-    ? `${trimmed} more cleared the bar but did not fit. They are in the full report.`
+    // Says "will not come round again" rather than the old "they are in the
+    // full report". Both halves of that were false on a scheduled run:
+    // report.html is capped at 250 rows sorted by call, so the weak-call cards
+    // that get trimmed here are exactly the ones it does not keep, and a
+    // scheduled run does not publish the report anywhere Ryan can read it.
+    // Every trimmed card is marked as emailed, so this is the only notice.
+    ? `${trimmed} more cleared the bar but did not fit this email, and will not come round again. If this number is large the bar is too loose, not the cap too small.`
     : '';
 
   const text = [
@@ -301,10 +377,8 @@ ${why ? `<div style="font-size:12px;color:#9a9a9a;margin-top:3px">${esc(why)}</d
   const html = `<div style="background:#f6f5f2;padding:20px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif">
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 auto"><tr><td>
 
-<div style="font-size:20px;font-weight:700;color:#1a1a1a;margin-bottom:2px">${act.length
-  ? `${act.length} worth acting on`
-  : (targets.length ? `${targets.length} of your guys listed` : 'Nothing urgent')}</div>
-<div style="font-size:13px;color:#7a7a7a;margin-bottom:6px">PSA 10 and 9 NFL autos, landed in Australia, under what comparable cards ask</div>
+<div style="font-size:20px;font-weight:700;color:#1a1a1a;margin-bottom:2px">${esc(headline)}</div>
+<div style="font-size:13px;color:#7a7a7a;margin-bottom:6px">${esc(strapline)}</div>
 ${placeholder ? '<div style="background:#fff4e5;border:1px solid #f0d9b5;padding:9px 11px;border-radius:6px;font-size:12px;margin:10px 0">Test run.</div>' : ''}
 
 ${act.length ? heading('Worth acting on') + act.map(cardHtml).join('') : ''}
