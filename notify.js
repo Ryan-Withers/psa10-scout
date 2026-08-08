@@ -50,8 +50,8 @@ const worthEmailing = (r) => (r.verdict?.reasons || []).length > 0;
  * Lives here rather than inline in run.js so it can be tested. Inline, it was
  * deletable without a single assertion noticing.
  */
-const alertPopulation = (priced = [], unpriced = []) =>
-  [...priced, ...unpriced.filter(worthEmailing)];
+const alertPopulation = (priced = [], unpriced = [], unread = []) =>
+  [...priced, ...[...unpriced, ...unread].filter(worthEmailing)];
 
 /* ---------- the record of what has been sent ---------- */
 
@@ -131,7 +131,8 @@ async function notify(buys, { placeholder = false, dryRun = false } = {}) {
    */
   const candidates = news.filter(worthEmailing);
   const selection = selectAlerts(news);
-  const shown = [...selection.act, ...selection.also, ...selection.targets, ...selection.profile];
+  const shown = [...selection.act, ...selection.also, ...selection.targets,
+    ...selection.profile, ...selection.unread];
 
   if (!shown.length) {
     return { sent: 0, reason: news.length ? 'nothing met the bar' : 'nothing new since last scan' };
@@ -166,7 +167,7 @@ async function notify(buys, { placeholder = false, dryRun = false } = {}) {
   return {
     sent: shown.length, trimmed, subject: mail.subject, to,
     act: selection.act.length, also: selection.also.length,
-    targets: selection.targets.length, profile: selection.profile.length,
+    targets: selection.targets.length, profile: selection.profile.length, unread: selection.unread.length,
   };
 }
 
