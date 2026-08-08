@@ -258,10 +258,25 @@ module.exports = {
         enabled: true,
         maxExp: 1,          // 0 rookie, 1 second year. First or second year only.
         grade: 10,          // PSA 10 only. A 9 has to earn its place elsewhere.
-        maxAskUsd: 200,     // the asking price, not the landed cost
-        // Guess, and the one to reach for if this floods the inbox. null means
-        // any player at all, including men nobody rates, which is what Ryan
-        // asked for. A number here caps it at that dynasty rank.
+        maxAskUsd: 200,     // the asking price in USD, not the landed cost
+
+        /* Proof the man is actually a current NFL player, which experience on
+         * its own does not give. Sleeper reports years_exp 0 for someone who
+         * never played and freezes it at retirement, so the index carries Kurt
+         * Warner at 47 with exp 0 and 2,775 entries at exp 0 or 1 in total.
+         * Without these two, "first or second year" quietly includes the
+         * retired and the never-were.
+         *
+         * requireRanked is also the volume brake. Ryan asked for no quality
+         * bar and this is the mildest one that works: ranked at all by the
+         * dynasty market, not ranked highly. Set it false once a live run has
+         * printed its PROFILE tally and shown the number is manageable.
+         */
+        requireRostered: true,
+        requireRanked: true,
+
+        // A harder cap on top, if ranked-at-all still proves too loud. null
+        // means no ceiling beyond requireRanked.
         maxDynRank: null,
       },
     },

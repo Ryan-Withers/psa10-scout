@@ -55,8 +55,25 @@ function fitsProfile(r) {
   const p = CFG.alert.reasons.profile;
   if (!p.enabled) return false;
   if ((r.grade ?? 10) !== p.grade) return false;
-  if ((r.exp ?? 99) > p.maxExp) return false;
   if (!(r.askUsd > 0) || r.askUsd > p.maxAskUsd) return false;
+
+  /**
+   * "First or second year" cannot be read off experience alone.
+   *
+   * Sleeper reports years_exp 0 for a man who never played a down, and it
+   * freezes at retirement rather than counting up. The index holds Kurt Warner
+   * at age 47 exp 0 and Mike Vrabel at 44 exp 0, alongside 2,775 entries at
+   * exp 0 or 1 in total. Age does not save it either, because plenty of the
+   * never-played are in their twenties.
+   *
+   * isBoomRookie never had this problem because it also demands a dynasty rank
+   * inside the top 60, which no retired player carries. This rule was written
+   * without a rank test on purpose, so it needs its own proof of life: on a
+   * current roster, and rated by the dynasty market at all.
+   */
+  if ((r.exp ?? 99) > p.maxExp) return false;
+  if (p.requireRostered && !r.team) return false;
+  if (p.requireRanked && r.dynRank == null) return false;
   if (p.maxDynRank != null && !(r.dynRank != null && r.dynRank <= p.maxDynRank)) return false;
   return true;
 }

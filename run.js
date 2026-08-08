@@ -22,7 +22,7 @@ const { scoreListing, setConviction } = require('./score');
 const market = require('./market');
 const compare = require('./compare');
 const { evaluate, byCall } = require('./verdict');
-const { notify } = require('./notify');
+const { notify, alertPopulation } = require('./notify');
 
 (async () => {
   setConviction(P.getConviction());
@@ -181,18 +181,8 @@ const { notify } = require('./notify');
    * Last, deliberately. Everything above is written to disk before anything
    * is sent, so a Resend outage costs an email and not the scan.
    */
-  /**
-   * Unpriced cards are normally left out of the email: with no value there is
-   * no call to make and the "worth a look" pile is a report, not an alert.
-   * Named targets are the exception. Ryan asked to hear about those men every
-   * time, and a listing the tool could not value is the one he most needs to
-   * eyeball himself. Same for a card that fits the profile, which is judged on
-   * age, grade and asking price and needs no valuation at all.
-   */
-  const alsoAlertable = look.filter((r) => (r.verdict?.reasons || []).length > 0);
-
   try {
-    const r = await notify([...buys, ...alsoAlertable], {
+    const r = await notify(alertPopulation(buys, look), {
       placeholder: P.SOURCE !== 'live',
       dryRun: process.env.ALERT_DRY_RUN === '1',
     });

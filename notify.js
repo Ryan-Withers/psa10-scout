@@ -38,6 +38,21 @@ const REMEMBER_DAYS = 90;
 // card has a reason at all.
 const worthEmailing = (r) => (r.verdict?.reasons || []).length > 0;
 
+/**
+ * Which rows the notifier should even look at.
+ *
+ * Priced rows always. Unpriced ones only when they carry a reason: a named
+ * target the tool could not value is the card Ryan most needs to eyeball
+ * himself, and a profile card is judged on age, grade and asking price and
+ * needs no valuation at all. Everything else in the unpriced pile is a report,
+ * not an alert.
+ *
+ * Lives here rather than inline in run.js so it can be tested. Inline, it was
+ * deletable without a single assertion noticing.
+ */
+const alertPopulation = (priced = [], unpriced = []) =>
+  [...priced, ...unpriced.filter(worthEmailing)];
+
 /* ---------- the record of what has been sent ---------- */
 
 /**
@@ -155,4 +170,4 @@ async function notify(buys, { placeholder = false, dryRun = false } = {}) {
   };
 }
 
-module.exports = { notify, loadSent, saveSent, SENT_FILE };
+module.exports = { notify, loadSent, saveSent, alertPopulation, worthEmailing, SENT_FILE };

@@ -79,6 +79,29 @@ card eventually counts as a sale and inflates the cleared-price medians.
 is for readability. Marking only the shown ten turns it into a queue that
 drip-feeds the rest of the list on later runs.
 
+**Cap each email section before building the exclusion set, never after.**
+`selectAlerts` slices `act` and `also` first, then builds `shown` from what
+survived. Built from the uncapped lists instead, a named target at act
+position 11 was cut by the slice, barred from the targets section for being
+"already shown", rendered nowhere, and marked as emailed. The cap silently ate
+the one card the feature exists for.
+
+**Experience alone cannot tell you a player is early career.** Sleeper reports
+`years_exp` 0 for a man who never played and freezes it at retirement, so the
+index holds Kurt Warner at 47 with exp 0, among 2,775 entries at exp 0 or 1.
+`isBoomRookie` only escaped this by also demanding a dynasty rank inside the
+top 60. `fitsProfile` has no rank test, so it carries `requireRostered` and
+`requireRanked` instead. Any new rule keyed on `exp` needs one of the two.
+
+**Test the delivery, not just the decision.** The first cut of the three-reason
+alerting had six assertions, all stopping at `evaluate()`. Five separate
+mutations that each destroyed the feature outright, including deleting the
+target and profile buckets and reverting `notify`'s bar, all left the suite
+green. Assertions now run a card to rendered email text, and the wiring
+`run.js` used to do inline lives in `notify.alertPopulation` so it can be
+tested at all. Before trusting a new assertion, revert the guard it covers and
+watch it fail.
+
 **`verdict.reasons` is the only definition of what earns an email.** Three
 reasons: `TARGET` (a player flagged `alwaysAlert` in `my-players.json`, at any
 call, including unpriced), `DEAL` (the old bar, shout or BUY), `PROFILE`
