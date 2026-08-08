@@ -1,0 +1,486 @@
+{
+  "_README": "PRE-FILLED FROM YOUR OWN LIVE EBAY SCAN. These are the 30 cards most commonly listed right now in your budget. Everything is filled in except the price. Put what you believe each sells for in PSA 10 in psa10Usd and delete any card you do not care about. Leave psa10Usd as null and that row is ignored.",
+  "_tip": "seenNow and askRange are what eBay is asking today, for reference only. They are asks, not sales, so they run high.",
+  "rows": [
+    {
+      "year": 2021,
+      "set": "donruss optic",
+      "insert": "rated rookie",
+      "parallel": "white",
+      "player": "Rhamondre Stevenson",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 5,
+      "askRangeAud": [
+        182,
+        213
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2021,
+      "set": "prizm",
+      "insert": null,
+      "parallel": null,
+      "player": "Kyle Pitts",
+      "cardNo": "108",
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 4,
+      "askRangeAud": [
+        158,
+        158
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "contenders",
+      "insert": "rookie ticket",
+      "parallel": null,
+      "player": "Sam Howell",
+      "cardNo": "133",
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 4,
+      "askRangeAud": [
+        79,
+        157
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2015,
+      "set": "national treasures",
+      "insert": null,
+      "parallel": null,
+      "player": "Ty Montgomery",
+      "cardNo": null,
+      "serialOf": 49,
+      "psa10Usd": null,
+      "seenNow": 4,
+      "askRangeAud": [
+        109,
+        164
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "contenders",
+      "insert": "rookie ticket",
+      "parallel": null,
+      "player": "Dameon Pierce",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 3,
+      "askRangeAud": [
+        87,
+        190
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2020,
+      "set": "contenders",
+      "insert": "rookie ticket",
+      "parallel": null,
+      "player": "Cam Akers",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 3,
+      "askRangeAud": [
+        157,
+        158
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "bowman chrome",
+      "insert": null,
+      "parallel": null,
+      "player": "Dallas Turner",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 3,
+      "askRangeAud": [
+        79,
+        158
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "contenders",
+      "insert": "rookie ticket",
+      "parallel": null,
+      "player": "Desmond Ridder",
+      "cardNo": "114",
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 3,
+      "askRangeAud": [
+        47,
+        221
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "contenders",
+      "insert": null,
+      "parallel": null,
+      "player": "Tyler Allgeier",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 3,
+      "askRangeAud": [
+        120,
+        316
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2018,
+      "set": "contenders",
+      "insert": "rookie ticket",
+      "parallel": null,
+      "player": "Nick Chubb",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 3,
+      "askRangeAud": [
+        206,
+        356
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "select",
+      "insert": null,
+      "parallel": null,
+      "player": "Sauce Gardner",
+      "cardNo": null,
+      "serialOf": 199,
+      "psa10Usd": null,
+      "seenNow": 3,
+      "askRangeAud": [
+        142,
+        277
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "select",
+      "insert": "rookie signatures",
+      "parallel": "blue prizm",
+      "player": "Treylon Burks",
+      "cardNo": null,
+      "serialOf": 49,
+      "psa10Usd": null,
+      "seenNow": 3,
+      "askRangeAud": [
+        87,
+        229
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2021,
+      "set": "select",
+      "insert": null,
+      "parallel": "blue prizm",
+      "player": "Rhamondre Stevenson",
+      "cardNo": "RS",
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 3,
+      "askRangeAud": [
+        237,
+        237
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "contenders",
+      "insert": "rookie ticket",
+      "parallel": null,
+      "player": "Drake London",
+      "cardNo": null,
+      "serialOf": 23,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        277,
+        340
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2024,
+      "set": "bowman",
+      "insert": null,
+      "parallel": null,
+      "player": "Carson Beck",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        188,
+        315
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2018,
+      "set": "contenders",
+      "insert": null,
+      "parallel": null,
+      "player": "Kyle Lauletta",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        55,
+        55
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2019,
+      "set": "contenders",
+      "insert": null,
+      "parallel": null,
+      "player": "Diontae Johnson",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        77,
+        91
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2024,
+      "set": "topps chrome",
+      "insert": null,
+      "parallel": null,
+      "player": "Malik Nabers",
+      "cardNo": "RA-MNA",
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        348,
+        349
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2020,
+      "set": "select",
+      "insert": "rookie signatures",
+      "parallel": "blue prizm",
+      "player": "Van Jefferson",
+      "cardNo": null,
+      "serialOf": 75,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        79,
+        122
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2024,
+      "set": "contenders",
+      "insert": "rookie ticket",
+      "parallel": null,
+      "player": "Ladd McConkey",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        206,
+        206
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2021,
+      "set": "prizm",
+      "insert": null,
+      "parallel": null,
+      "player": "Justin Fields",
+      "cardNo": "334",
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        158,
+        158
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "contenders",
+      "insert": "rookie ticket",
+      "parallel": null,
+      "player": "Breece Hall",
+      "cardNo": "105",
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        221,
+        285
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2025,
+      "set": "phoenix",
+      "insert": null,
+      "parallel": "pandora silver",
+      "player": "Jaylin Noel",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        190,
+        237
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2021,
+      "set": "donruss",
+      "insert": "rated rookie",
+      "parallel": null,
+      "player": "Kyle Pitts",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        127,
+        127
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2020,
+      "set": "donruss optic",
+      "insert": "rated rookie",
+      "parallel": null,
+      "player": "Brandon Aiyuk",
+      "cardNo": null,
+      "serialOf": 150,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        158,
+        169
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2015,
+      "set": "prizm",
+      "insert": null,
+      "parallel": null,
+      "player": "Amari Cooper",
+      "cardNo": "201",
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        158,
+        237
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "contenders optic",
+      "insert": null,
+      "parallel": null,
+      "player": "Sauce Gardner",
+      "cardNo": null,
+      "serialOf": 99,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        316,
+        356
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2021,
+      "set": "prizm",
+      "insert": null,
+      "parallel": null,
+      "player": "Nico Collins",
+      "cardNo": "360",
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        174,
+        174
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "contenders",
+      "insert": "rookie ticket",
+      "parallel": null,
+      "player": "Bailey Zappe",
+      "cardNo": "104",
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        237,
+        316
+      ],
+      "reviewed": null
+    },
+    {
+      "year": 2022,
+      "set": "contenders",
+      "insert": "rookie ticket",
+      "parallel": null,
+      "player": "Chris Olave",
+      "cardNo": null,
+      "serialOf": null,
+      "psa10Usd": null,
+      "seenNow": 2,
+      "askRangeAud": [
+        237,
+        308
+      ],
+      "reviewed": null
+    }
+  ]
+}

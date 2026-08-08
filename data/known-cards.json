@@ -1,0 +1,51 @@
+{
+  "_README": "FILL THIS IN. List cards you already know the real PSA 10 price of. Ten to fifteen is plenty. For each one: paste a title the way eBay would write it, and put what you believe the card genuinely sells for in PSA 10. Currency is yours to pick per row. Then run: npm run backtest",
+
+  "_howToFillIn": {
+    "title": "An eBay-style title. Copy a real one if you have it open, otherwise write it the way sellers do: year, brand, set, player, parallel, PSA 10.",
+    "knownValue": "What you believe it actually sells for in PSA 10. Your number, not a guess from a website.",
+    "currency": "AUD or USD",
+    "note": "Optional. Anything you want to remember about why you picked this card."
+  },
+
+  "_theExamplesBelowAreMine": "These rows are placeholders so the report runs today. The values are invented, same as the rest of the placeholder data. Delete them and put your own in.",
+
+  "cards": [
+    {
+      "title": "2020 Panini Contenders Justin Herbert Rookie Ticket Auto #101 PSA 10 GEM MINT",
+      "knownValue": 550,
+      "currency": "USD",
+      "note": "EXAMPLE - replace me"
+    },
+    {
+      "title": "2021 Panini Donruss Optic Ja'Marr Chase Rated Rookie Signatures Holo PSA 10 Auto",
+      "knownValue": 900,
+      "currency": "USD",
+      "note": "EXAMPLE - replace me"
+    },
+    {
+      "title": "2023 Panini Prizm Bryce Young Rookie Autographs Silver Prizm #RA-BY PSA 10 GEM MT",
+      "knownValue": 180,
+      "currency": "USD",
+      "note": "EXAMPLE - replace me"
+    },
+    {
+      "title": "2016 Panini Contenders Michael Thomas Rookie Ticket Auto PSA 10 GEM MINT 10",
+      "knownValue": 210,
+      "currency": "USD",
+      "note": "EXAMPLE - replace me"
+    },
+    {
+      "title": "2011 Topps Chrome A.J. Green Rookie Autograph Refractor #150 PSA 10 GEM MT",
+      "knownValue": 140,
+      "currency": "USD",
+      "note": "EXAMPLE - replace me"
+    },
+    {
+      "title": "2022 Panini Mosaic Brock Purdy Rookie Autographs Green Prizm #RA-BP PSA 10 GEM",
+      "knownValue": 260,
+      "currency": "USD",
+      "note": "EXAMPLE - replace me"
+    }
+  ]
+}

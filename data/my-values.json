@@ -1,0 +1,26 @@
+{
+  "_README": "YOUR CARD VALUES. This is the trusted half of the pricing. Anything you list here is treated as truth and outranks whatever the tool infers from other eBay listings. Add cards you actually chase. Thirty to fifty is plenty to start, and you can add to it whenever you learn a new card.",
+
+  "_fields": {
+    "year": "Card year. For season-dated products like 2023-24, use the first year.",
+    "set": "Lowercase, as the parser writes it: prizm, select, contenders, donruss optic, national treasures, immaculate, mosaic, topps chrome, spectra, origins, phoenix, absolute, flawless, zenith, certified, sp authentic",
+    "insert": "The autograph subset, or null. Use: rookie auto, rookie ticket, rookie patch auto, rookie jersey auto, rated rookie, kaboom, draft picks",
+    "parallel": "Colour or finish, or null for base. Use: silver, gold, green, blue, red, orange, holo, refractor, fire burst",
+    "player": "Full name as printed on the card.",
+    "psa10Usd": "What you believe it sells for in PSA 10, in US dollars. Your number.",
+    "serialOf": "The print run denominator if numbered, e.g. 99 for /99. Otherwise null.",
+    "cardNo": "Card number if you know it, otherwise null.",
+    "reviewed": "Date you last checked this value. The tool warns when a value goes stale."
+  },
+
+  "_note": "The rows below are examples using invented prices, same as the rest of the placeholder data. Replace them.",
+
+  "rows": [
+    { "year": 2020, "set": "contenders", "insert": "rookie ticket", "parallel": null, "player": "Justin Herbert", "cardNo": "101", "serialOf": null, "psa10Usd": 550, "reviewed": "2026-07-29" },
+    { "year": 2021, "set": "donruss optic", "insert": "rookie auto", "parallel": "holo", "player": "Ja'Marr Chase", "cardNo": null, "serialOf": null, "psa10Usd": 900, "reviewed": "2026-07-29" },
+    { "year": 2023, "set": "prizm", "insert": "rookie auto", "parallel": "silver", "player": "Bryce Young", "cardNo": "RA-BY", "serialOf": null, "psa10Usd": 180, "reviewed": "2026-07-29" },
+    { "year": 2016, "set": "contenders", "insert": "rookie ticket", "parallel": null, "player": "Michael Thomas", "cardNo": null, "serialOf": null, "psa10Usd": 210, "reviewed": "2026-07-29" },
+    { "year": 2022, "set": "mosaic", "insert": "rookie auto", "parallel": "green", "player": "Brock Purdy", "cardNo": "RA-BP", "serialOf": null, "psa10Usd": 260, "reviewed": "2026-07-29" },
+    { "year": 2020, "set": "contenders optic", "insert": "rookie ticket", "parallel": null, "player": "Justin Jefferson", "cardNo": null, "serialOf": null, "psa10Usd": 1100, "reviewed": "2026-07-29" }
+  ]
+}

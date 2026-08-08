@@ -1,0 +1,39 @@
+node_modules/
+
+# Claude's session working files. These live alongside the project on disk
+# and contain full conversation transcripts, INCLUDING API keys that were
+# pasted in chat. The repo is public. This line is what keeps a stray
+# "git add -A" from publishing them. Do not remove it.
+.claude/
+
+# Leftovers from the abandoned Cloudflare deploy. Harmless, but they do not
+# belong in the repo if a copy still has them on disk.
+.build/
+.wrangler/
+
+# 14MB raw Sleeper dump. build-player-index.js downloads it when it is more
+# than 20 hours old, so it never needs committing and player ages, teams and
+# experience stay current instead of freezing at whenever it was last saved.
+data/sleeper-players-raw.json
+
+# Written every run
+ranked.json
+report.html
+alert-preview.html
+backtest-result.json
+
+# The accumulated price picture, and the record of what has already been
+# emailed. NOT tracked here. GitHub Actions keeps them on the "state" branch,
+# force pushed each run, so there is exactly one copy and the repo does not
+# grow by 400KB an hour. Tracking them on main as well would mean every scan
+# showed up as a conflicting change.
+data/market-store.json
+data/alerted.json
+
+# Test runs write to their own price history so invented listings can never
+# pollute the real one.
+data/market-store-demo.json
+data/listings-live.json
+
+# Secrets live in GitHub repository secrets, never in a file.
+.env

@@ -1,0 +1,203 @@
+/**
+ * The per-card take.
+ *
+ * Ryan's brief: treat every line like a quick second opinion, give an actual
+ * call, and shout when something is either outstanding value or a boom
+ * rookie. A score of 0.374 is not a second opinion. "Third year RB, dynasty
+ * top 100 and climbing, 24% under what these go for, seller takes offers" is.
+ *
+ * Deliberately rules-based rather than a language model call. It runs over a
+ * thousand-odd listings every 20 minutes, for free, offline, in milliseconds.
+ * Everything it says is traceable to a number on the row, so a claim can
+ * always be checked.
+ */
+
+const CFG = require('./config');
+
+const money = (n) => '$' + Math.round(Number(n));
+const pct = (n) => Math.round(Math.abs(n) * 100) + '%';
+
+/* ---------- the profile checks ---------- */
+
+// Ryan's stated target: early career, well rated, moving up.
+function isBoomRookie(r) {
+  return (r.exp ?? 99) <= 2
+    && r.dynRank != null && r.dynRank <= 60
+    && (r.dynTrend30 ?? 0) >= 0;
+}
+
+function isTarget(r) {
+  return (r.conviction ?? 1) > 1;
+}
+
+// A discount this size on a card we can price is either the find of the week
+// or, far more often, a bad comparison. Both are worth saying out loud.
+function isSuspicious(r) {
+  return r.edge != null && r.edge > 0.55;
+}
+
+/* ---------- the call ---------- */
+
+/**
+ * Is this a player worth owning at all?
+ *
+ * The first cut of this function ignored the question and 78 of its 104 top
+ * calls were unranked players. Cheap, yes. But a card nobody is chasing being
+ * cheap is not an opportunity, it is just the price. Discount alone cannot
+ * earn a strong call.
+ */
+function playerQuality(r) {
+  if (isTarget(r)) return 3;               // you named him
+  if (isBoomRookie(r)) return 3;           // early career, well rated, not falling
+  if (r.dynRank == null) return 0;         // outside the dynasty top 475
+  if (r.dynRank <= 120) return 2;
+  if (r.dynRank <= 250) return 1;
+  return 0.5;
+}
+
+/**
+ * Seven levels. Two things gate the call together: how big the discount is,
+ * and whether the player is worth having. A big discount on a nobody tops out
+ * at WATCH. The bar also moves with how much the valuation can be trusted, so
+ * a number scraped from "same rarity, any set" cannot produce a confident buy.
+ */
+/**
+ * A PSA 9 has to earn its place. It is a different asset from a 10, it is
+ * priced against other 9s, and most of the time it is not what Ryan is
+ * hunting. Two ways through: the player is elite and early career, or the
+ * discount is large enough that the grade stops mattering.
+ */
+function nineEarnsItsPlace(r) {
+  if ((r.grade ?? 10) !== 9) return true;
+  const elite = (r.exp ?? 99) <= 3 && r.dynRank != null && r.dynRank <= 60;
+  const insane = (r.edge ?? 0) >= 0.45;
+  return elite || insane || isTarget(r);
+}
+
+function decide(r) {
+  const e = r.edge;
+  const conf = r.valueConfidence ?? 0;   // 3 tight, 1 loose, 0 none
+  const q = playerQuality(r);
+
+  if (!nineEarnsItsPlace(r)) return 'SKIP';
+  if (e == null) return q >= 3 ? 'WATCH' : 'SKIP';
+  if (isSuspicious(r)) return 'CHECK';
+
+  const strongBar = conf >= 3 ? 0.30 : 0.40;
+  const buyBar = conf >= 3 ? 0.15 : 0.25;
+
+  // Player has to be worth owning before price makes it a strong call.
+  if (e >= strongBar && q >= 2 && conf >= 2) return 'STRONG BUY';
+  if (e >= buyBar && q >= 1) return 'BUY';
+  if (e >= buyBar && q < 1) return 'WATCH';   // cheap, but nobody wants him
+  if (e >= 0.05 && q >= 1) return 'WATCH';
+  if (e >= -0.15) return 'FAIR';
+  return 'PASS';
+}
+
+/* ---------- the write-up ---------- */
+
+const ORDINAL = ['rookie', '2nd year', '3rd year', '4th year', '5th year',
+  '6th year', '7th year', '8th year', '9th year'];
+
+function playerLine(r) {
+  const exp = r.exp ?? null;
+  const pos = r.pos || 'player';
+  const yr = exp === 0 ? 'rookie' : (exp != null && exp < ORDINAL.length) ? ORDINAL[exp]
+    : (exp != null && exp >= 10) ? 'veteran' : '';
+  const bits = [yr, pos].filter(Boolean).join(' ');
+  if (r.dynRank == null) return `${bits}, not currently rated in dynasty`;
+  const t = r.dynTrend30 ?? 0;
+  const dir = t >= 150 ? ', climbing hard' : t >= 50 ? ' and climbing'
+    : t <= -150 ? ', sliding hard' : t <= -50 ? ' and sliding' : '';
+  return `${bits}, dynasty #${r.dynRank}${dir}`;
+}
+
+function cardLine(r) {
+  const setWords = new Set(String(r.set || '').toLowerCase().split(/\s+/));
+  const par = String(r.parallel || '').split(/\s+/)
+    .filter((w) => w && !setWords.has(w.toLowerCase())).join(' ');
+  const tc = (s) => String(s || '').replace(/\b[a-z]/g, (c) => c.toUpperCase());
+  const ser = r.serialOf ? ` /${r.serialOf}` : '';
+  return `${r.year} ${tc(r.set)}${par ? ' ' + tc(par) : ''}${ser} auto`;
+}
+
+/**
+ * Two or three sentences. What it is, what it costs against what these go
+ * for, and the one thing that most changes the decision.
+ */
+function reasoning(r) {
+  const out = [];
+
+  out.push(`${r.player}, ${playerLine(r)}.`);
+
+  if (r.edge != null && r.compAud) {
+    const dir = r.edge >= 0 ? 'under' : 'over';
+    out.push(`${cardLine(r)} at ${money(r.landedAud)} landed, ${pct(r.edge)} ${dir} the ${money(r.compAud)} comparable cards are going for.`);
+  } else {
+    out.push(`${cardLine(r)} at ${money(r.landedAud)} landed. Nothing comparable to price it against.`);
+  }
+
+  // The single most decision-relevant caveat, not a list of every flag.
+  if (isSuspicious(r)) {
+    out.push('A gap that big is usually a mismatched comparison rather than a find. Check the card before acting.');
+  } else if (r.valueBasis === 'one-of-one') {
+    out.push('One of one, so there is no comparable and no way to value it from data. Your call entirely.');
+  } else if (r.valueConfidence === 1) {
+    out.push(`Thin evidence though, priced off ${r.valueN} cards of similar rarity from other sets.`);
+  } else if (isTarget(r)) {
+    out.push('One of your named targets.');
+  } else if (isBoomRookie(r) && r.edge != null && r.edge >= 0.15) {
+    out.push('Early career, well rated and not falling, which is the profile you are hunting.');
+  } else if (r.dynRank == null && r.edge != null && r.edge >= 0.2) {
+    out.push('Cheap, but nobody is rating this player in dynasty right now, so cheap may simply be the price.');
+  } else if (r.bestOffer && r.edge != null && r.edge > 0) {
+    out.push('Seller takes offers, so there may be more in it.');
+  }
+
+  return out.join(' ');
+}
+
+/* ---------- public ---------- */
+
+/**
+ * One line, six words or so, that says why this is on screen. This is what
+ * gets read; the paragraph underneath is for when it lands.
+ */
+function hook(r) {
+  if (isTarget(r)) return 'One of your guys, and it is cheap';
+  if (isSuspicious(r)) return 'Looks too good, worth eyeballing';
+  const t = r.dynTrend30 ?? 0;
+  if (isBoomRookie(r) && t >= 150) return 'Young, top-60, and the market is moving to him';
+  if (isBoomRookie(r)) return 'Exactly the profile you are hunting';
+  if (r.dynRank != null && r.dynRank <= 24) return 'Top-24 dynasty asset, well under the going rate';
+  if ((r.edge ?? 0) >= 0.45) return 'Priced miles below anything comparable';
+  if (t >= 150) return 'Market is moving toward him right now';
+  if ((r.grade ?? 10) === 9) return 'A nine, but the discount makes up for it';
+  return 'Solidly under what these go for';
+}
+
+function evaluate(r) {
+  const call = decide(r);
+  const tags = [];
+  if (isTarget(r)) tags.push('TARGET');
+  if (isBoomRookie(r)) tags.push('BOOM ROOKIE');
+  if ((r.grade ?? 10) === 9) tags.push('PSA 9');
+  if (r.bestOffer) tags.push('OFFERS');
+  if (r.country && r.country !== 'AU') tags.push('IMPORT');
+
+  return {
+    call,
+    tags,
+    hook: hook(r),
+    headline: `${r.player} ${cardLine(r)} — ${call}`,
+    take: reasoning(r),
+    // Shout-worthy: the two things Ryan asked to be told about.
+    shout: call === 'STRONG BUY' || (isTarget(r) && ['BUY', 'STRONG BUY'].includes(call)),
+  };
+}
+
+const RANK = { 'STRONG BUY': 0, 'BUY': 1, 'CHECK': 2, 'WATCH': 3, 'FAIR': 4, 'PASS': 5, 'SKIP': 6 };
+const byCall = (a, b) => (RANK[a.verdict?.call] ?? 9) - (RANK[b.verdict?.call] ?? 9) || (b.score ?? 0) - (a.score ?? 0);
+
+module.exports = { evaluate, decide, isBoomRookie, isTarget, byCall, RANK };

@@ -1,0 +1,16 @@
+{
+  "_README": "Your read on players. This is gut feel and it is treated as gut feel: it multiplies the score, it does not pretend to be a price. Above 1 pushes a player up the list, below 1 pushes them down. Add and change freely, nothing else depends on it.",
+
+  "_scale": {
+    "1.5": "conviction buy, want every cheap copy",
+    "1.25": "like him, lean in",
+    "1.0": "no opinion, default for everyone not listed",
+    "0.75": "cooling on him",
+    "0.5": "avoid"
+  },
+
+  "rows": [
+    { "player": "Luther Burden III", "conviction": 1.4, "note": "think he'll be great" },
+    { "player": "Emeka Egbuka", "conviction": 1.4, "note": "think he'll be great" }
+  ]
+}

@@ -1,0 +1,160 @@
+# The sweep, on GitHub's machines, every 20 minutes.
+#
+# Why here rather than Cloudflare: a Worker on the free plan gets 10ms of
+# processing per run. Loading the NFL player list alone costs 8ms and parsing
+# a hundred card titles costs six more, so the free plan was never going to
+# run this. A GitHub runner has no such ceiling and costs nothing.
+#
+# Two things this file has to get right:
+#
+#   State. The price picture is the product. It is built by seeing the same
+#   cards listed over and over, so it has to survive between runs. It lives
+#   on a branch called "state" that is force pushed each time, which keeps
+#   exactly one copy and stops the repo growing a 400KB commit every run.
+#
+#   Never two at once. Two overlapping scans would both read the same price
+#   history and the second to finish would overwrite the first.
+
+name: PSA 10 scout
+
+on:
+  schedule:
+    # A backstop, not the clock. GitHub delays scheduled jobs when it is busy
+    # and drops them outright under load, so the every-20-minutes cadence is
+    # driven by the Cloudflare worker in trigger/, which fires on time and
+    # arrives below as repository_dispatch.
+    #
+    # This exists so a dead trigger degrades the tool to four scans a day
+    # instead of silencing it. Kept sparse deliberately: doubling up with the
+    # trigger would spend eBay's daily search budget twice over.
+    - cron: '23 */6 * * *'
+  # Fired by the optional Cloudflare trigger worker (trigger/), which is a
+  # punctual clock. Runs arriving this way start in seconds instead of
+  # queueing behind everyone's scheduled crons.
+  repository_dispatch:
+    types: [scan]
+  workflow_dispatch:          # the Run workflow button
+    inputs:
+      full:
+        description: 'Sweep the full query set instead of one slice'
+        type: boolean
+        default: true
+
+concurrency:
+  group: psa10-scout
+  cancel-in-progress: false   # let the running scan finish, do not kill it
+
+permissions:
+  contents: write             # needed to push the state branch
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No npm install. The scan has no runtime dependencies, which is worth
+      # keeping: nothing to break, nothing to audit, nothing to wait for.
+
+      # Cheap, offline, and the two suites guard the faults that are silent
+      # in production: a parser that mis-reads a title, and a sold signal
+      # that invents sales. Better to fail here than to spend eBay quota
+      # producing confident nonsense.
+      - name: Tests
+        run: npm test
+
+      - name: Restore the price history
+        run: |
+          mkdir -p data
+          if git fetch --depth=1 origin state 2>/dev/null; then
+            git show FETCH_HEAD:market-store.json > data/market-store.json 2>/dev/null || echo '{}' > data/market-store.json
+            git show FETCH_HEAD:alerted.json      > data/alerted.json      2>/dev/null || echo '{}' > data/alerted.json
+            echo "restored $(wc -c < data/market-store.json) bytes of price history"
+          else
+            echo '{}' > data/market-store.json
+            echo '{}' > data/alerted.json
+            echo "first run, starting from empty"
+          fi
+
+      # The Sleeper dump is 14MB and changes about once a day. Downloading it
+      # every run costs 12 seconds for nothing. Keyed on today's date,
+      # so it is fetched on the first run of the day and reused for the other
+      # rest. Dynasty ranks are a separate, tiny fetch and stay every run.
+      - id: day
+        run: echo "d=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - id: sleeper
+        uses: actions/cache@v4
+        with:
+          path: data/sleeper-players-raw.json
+          key: sleeper-${{ steps.day.outputs.d }}
+
+      - name: Refresh the player list and dynasty ranks
+        run: |
+          # A restored file keeps its original mtime, which build-player-index
+          # reads as stale and re-downloads. The cache key is already scoped to
+          # today, so mark it fresh and let the key do the expiring.
+          if [ "${{ steps.sleeper.outputs.cache-hit }}" = "true" ]; then
+            touch data/sleeper-players-raw.json
+          fi
+          node build-player-index.js
+
+      - name: Scan eBay
+        env:
+          DATA_SOURCE: live
+          MARKETPLACES: EBAY_AU,EBAY_US
+          MAX_PRICE_USD: '250'
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_TO: ${{ secrets.ALERT_TO }}
+          ALERT_FROM: ${{ secrets.ALERT_FROM }}
+          # Set this to 1 as a repository variable to scan and score without
+          # sending anything. Useful for a first run.
+          ALERT_DRY_RUN: ${{ vars.ALERT_DRY_RUN }}
+          # The run counter drives the query rotation. A counter cannot
+          # drift when GitHub starts a run late, which it routinely does.
+          SLICE_INDEX: ${{ github.run_number }}
+          # Manual runs default to sweeping every query, so the first run
+          # and any hand-triggered check covers the whole market at once.
+          SCAN_ALL: ${{ (github.event_name == 'workflow_dispatch' && inputs.full) && '1' || '' }}
+        run: node run.js
+
+      - name: Save the price history
+        # always(), so a failure during scoring does not throw away the
+        # listings this run already recorded.
+        if: always()
+        run: |
+          tmp=$(mktemp -d)
+          cp data/market-store.json data/alerted.json "$tmp/" 2>/dev/null || true
+          cd "$tmp"
+          git init -q -b state
+          git config user.name  "psa10-scout"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "price history $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push -q --force \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            state:refs/heads/state
+          echo "saved"
+
+      # Only when a person will actually look at it: a hand-triggered run,
+      # or a failure that needs diagnosing. Uploading 72 reports a day from
+      # scheduled runs is storage nobody reads; the email is the product.
+      - name: Keep the report
+        if: failure() || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            report.html
+            ranked.json
+            alert-preview.html
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,17 @@
+# The trigger worker. Fires a webhook at GitHub every 20 minutes, on time,
+# which is the one thing the Cloudflare free plan is perfectly suited to.
+#
+# Deploy from this folder:
+#   npx wrangler deploy
+#   npx wrangler secret put GH_TOKEN     (paste the fine-grained PAT)
+
+name = "psa10-scout-trigger"
+main = "worker.js"
+compatibility_date = "2026-07-01"
+
+[triggers]
+crons = ["0,20,40 * * * *"]
+
+[vars]
+# Change this to your GitHub username before deploying.
+REPO = "YOUR-USERNAME/psa10-scout"

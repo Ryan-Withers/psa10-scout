@@ -1,0 +1,16 @@
+{
+  "name": "psa10-scout",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Scans eBay for PSA 10 and 9 NFL autographs, values them against comparable cards, and emails the ones worth acting on.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "scan": "node run.js",
+    "test": "node test-parser.js && node test-market.js",
+    "index": "node build-player-index.js",
+    "backtest": "node backtest.js",
+    "check": "npm test && npm run scan"
+  }
+}
