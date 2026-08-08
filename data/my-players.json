@@ -9,8 +9,10 @@
     "0.5": "avoid"
   },
 
+  "_alwaysAlert": "Set true and every listing of that player is emailed once, whatever the tool thinks of the price, including PASS and cards it cannot value. Deliberately separate from conviction: conviction is how much you like a player, this is whether you want your phone to buzz. Leave it off for anyone you merely rate, or the email stops being a shortlist.",
+
   "rows": [
-    { "player": "Luther Burden III", "conviction": 1.4, "note": "think he'll be great" },
-    { "player": "Emeka Egbuka", "conviction": 1.4, "note": "think he'll be great" }
+    { "player": "Luther Burden III", "conviction": 1.4, "alwaysAlert": true, "note": "think he'll be great" },
+    { "player": "Emeka Egbuka", "conviction": 1.4, "alwaysAlert": true, "note": "think he'll be great" }
   ]
 }

@@ -79,6 +79,20 @@ card eventually counts as a sale and inflates the cleared-price medians.
 is for readability. Marking only the shown ten turns it into a queue that
 drip-feeds the rest of the list on later runs.
 
+**`verdict.reasons` is the only definition of what earns an email.** Three
+reasons: `TARGET` (a player flagged `alwaysAlert` in `my-players.json`, at any
+call, including unpriced), `DEAL` (the old bar, shout or BUY), `PROFILE`
+(first or second year, PSA 10, asking under `maxAskUsd`, no discount test).
+`notify.js` and `alert.js` both read that array. Restating the bar as a
+threshold in either is how the two drift apart and cards get marked sent
+without being shown.
+
+**Anything reaching the email can now be priced above the market.** `hook()`
+and the alert copy used to hardcode the word "under" next to the edge, which
+was safe while only buys were emailed. Targets and profile cards arrive at any
+call. Telling Ryan a card is cheap when it is 9% over is how he stops
+believing the rest of the email.
+
 **A hand-entered value needs a real price to count.** `handValueRows` drops
 any row whose `psa10Usd` is not a positive number. `my-values-TOFILL.json` is
 a 30 card worksheet meant to be filled a few at a time, and a blank row that

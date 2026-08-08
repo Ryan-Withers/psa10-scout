@@ -28,6 +28,7 @@ const compare = require('./compare');
 const { buildIndex, matchListing } = require('./match');
 const { scoreListing } = require('./score');
 const { notify, loadSent } = require('./notify');
+const { evaluate } = require('./verdict');
 const CFG = require('./config');
 
 let pass = 0, fail = 0;
@@ -134,6 +135,71 @@ check('a card left blank on the worksheet still gets a comparable estimate', () 
   assert.ok(scored.compAud > 0, `card valued at ${scored.compAud}`);
 });
 
+/* ---------- what earns an email ---------- */
+
+// Three reasons, and they are not interchangeable. A named target is emailed
+// at any call, including the ones the tool rates badly and the ones it cannot
+// value at all, because Ryan asked to hear about those men every time. A
+// profile card is judged on age, grade and asking price with no reference to
+// discount. Everything else still has to be a deal. The fourth assertion is
+// the one that matters most: without it these rules quietly become "email
+// everything", and the shortlist stops being a shortlist.
+
+const row = (over = {}) => ({
+  itemId: 'R1', player: 'Some Guy', year: 2024, set: 'prizm', parallel: null,
+  grade: 10, exp: 4, age: 26, dynRank: 150, dynTrend30: 0, conviction: 1,
+  alwaysAlert: false, askUsd: 300, landedAud: 460, compAud: 500, edge: 0.08,
+  valueConfidence: 3, score: 0.05, ...over,
+});
+const reasonsFor = (over) => { const r = row(over); return evaluate(r).reasons; };
+
+check('a named target is emailed even when the call is bad', () => {
+  const r = row({ player: 'Luther Burden III', conviction: 1.4, alwaysAlert: true, edge: -0.2, landedAud: 600 });
+  const v = evaluate(r);
+  assert.ok(['PASS', 'SKIP', 'FAIR', 'WATCH'].includes(v.call), `expected a weak call, got ${v.call}`);
+  assert.ok(v.reasons.includes('TARGET'), 'a named target at a bad price was not flagged for the email');
+});
+
+check('a named target the tool cannot value is still emailed', () => {
+  // No edge, no comp: this is what a row in the "worth a look" pile looks like.
+  const r = row({ player: 'Emeka Egbuka', conviction: 1.4, alwaysAlert: true, edge: undefined, compAud: undefined, unpriced: 'no-comp-for-player-year' });
+  assert.ok(evaluate(r).reasons.includes('TARGET'),
+    'an unpriced target was dropped, which is the one Ryan most needs to see himself');
+});
+
+check('the profile is first or second year, PSA 10, under the asking ceiling', () => {
+  const P = CFG.alert.reasons.profile;
+  assert.ok(reasonsFor({ exp: 0, grade: 10, askUsd: P.maxAskUsd - 1 }).includes('PROFILE'), 'a rookie PSA 10 under the ceiling did not qualify');
+  assert.ok(reasonsFor({ exp: 1, grade: 10, askUsd: P.maxAskUsd - 1 }).includes('PROFILE'), 'a second year PSA 10 under the ceiling did not qualify');
+  assert.ok(!reasonsFor({ exp: 2, grade: 10, askUsd: 100 }).includes('PROFILE'), 'a third year man qualified on profile');
+  assert.ok(!reasonsFor({ exp: 0, grade: 9, askUsd: 100 }).includes('PROFILE'), 'a PSA 9 qualified on profile');
+  assert.ok(!reasonsFor({ exp: 0, grade: 10, askUsd: P.maxAskUsd + 1 }).includes('PROFILE'), 'a card over the asking ceiling qualified on profile');
+});
+
+check('an ordinary card that is not a deal earns no email', () => {
+  // Fourth year, unremarkable player, PSA 10, priced at what it is worth.
+  assert.deepStrictEqual(reasonsFor({ exp: 4, askUsd: 300, edge: 0.02, landedAud: 490 }), [],
+    'a card qualifying on nothing was still queued for the email');
+});
+
+check('a card priced above the market is never described as cheap', () => {
+  // The hook used to assume everything reaching the email was a bargain,
+  // which was true while only buys were emailed. Targets and profile cards
+  // now arrive at any call. One line claiming a dear card is cheap costs the
+  // credibility of every other line in the email.
+  const over = evaluate(row({ player: 'Luther Burden III', conviction: 1.4, alwaysAlert: true, landedAud: 600, compAud: 500, edge: -0.2 }));
+  assert.ok(!/cheap|under|below/i.test(over.hook), `hook called a dear card cheap: "${over.hook}"`);
+  assert.ok(!/cheap|under|below/i.test(over.take), `take called a dear card cheap: "${over.take}"`);
+
+  const level = evaluate(row({ conviction: 1.4, alwaysAlert: true, landedAud: 500, compAud: 500, edge: 0 }));
+  assert.ok(!/cheap/i.test(level.hook), `hook called a fairly priced card cheap: "${level.hook}"`);
+});
+
+check('the profile does not need a valuation', () => {
+  assert.ok(reasonsFor({ exp: 1, grade: 10, askUsd: 150, edge: undefined, compAud: undefined }).includes('PROFILE'),
+    'a profile card was gated on having a value, which is the opposite of the point');
+});
+
 /* ---------- alert dedupe ---------- */
 
 const SENT = path.join(__dirname, 'data/alerted.json');
@@ -155,10 +221,12 @@ const withStubbedResend = async (fn) => {
   }
 };
 
+// reasons is what notify and selectAlerts both read to decide whether a card
+// belongs in the email. These are all BUY or better, so they qualify on DEAL.
 const buy = (id, call) => ({
   itemId: id, player: `Player ${id}`, edge: 0.3, score: 1, landedAud: 150, compAud: 250,
-  year: 2024, set: 'prizm', exp: 2, dynRank: 30,
-  verdict: { call, shout: call === 'STRONG BUY', take: 'test', tags: [] },
+  year: 2024, set: 'prizm', exp: 2, dynRank: 30, grade: 10, askUsd: 120,
+  verdict: { call, shout: call === 'STRONG BUY', take: 'test', tags: [], reasons: ['DEAL'] },
 });
 
 (async () => {

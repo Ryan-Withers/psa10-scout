@@ -30,6 +30,50 @@ function isTarget(r) {
   return (r.conviction ?? 1) > 1;
 }
 
+/* ---------- why a card earns an email ---------- */
+
+/**
+ * A named target, flagged alwaysAlert in data/my-players.json. Ryan asked to
+ * hear about these whatever the tool thinks, so this reason ignores the call,
+ * the edge and whether the card could be valued at all.
+ */
+function isAlwaysAlert(r) {
+  return CFG.alert.reasons.targetAnyCall === true && r.alwaysAlert === true;
+}
+
+/**
+ * The shape Ryan is hunting, judged on the card rather than on the market:
+ * a first or second year man, PSA 10, asking under the ceiling.
+ *
+ * No discount test and no rank test, on purpose. "Is this the kind of card I
+ * want at this price" is a different question from "is this cheap against its
+ * comps", and answering it separately is what lets a card the tool cannot
+ * value still reach the email. maxDynRank in config is the brake if this
+ * turns out to be too loud.
+ */
+function fitsProfile(r) {
+  const p = CFG.alert.reasons.profile;
+  if (!p.enabled) return false;
+  if ((r.grade ?? 10) !== p.grade) return false;
+  if ((r.exp ?? 99) > p.maxExp) return false;
+  if (!(r.askUsd > 0) || r.askUsd > p.maxAskUsd) return false;
+  if (p.maxDynRank != null && !(r.dynRank != null && r.dynRank <= p.maxDynRank)) return false;
+  return true;
+}
+
+/**
+ * Every reason this card is in the email, strongest first. Empty means it has
+ * not earned one. notify.js and alert.js both read this, so the bar lives in
+ * one place instead of being restated as a threshold in each.
+ */
+function alertReasons(r, { call, shout }) {
+  const out = [];
+  if (isAlwaysAlert(r)) out.push('TARGET');
+  if (shout || call === 'BUY') out.push('DEAL');
+  if (fitsProfile(r)) out.push('PROFILE');
+  return out;
+}
+
 // A discount this size on a card we can price is either the find of the week
 // or, far more often, a bad comparison. Both are worth saying out loud.
 function isSuspicious(r) {
@@ -165,6 +209,22 @@ function reasoning(r) {
  * gets read; the paragraph underneath is for when it lands.
  */
 function hook(r) {
+  // Every line below this point claimed the card was cheap, which was safe
+  // while only BUYs and better were emailed. Named targets and profile cards
+  // now arrive at any call, so a card at or above the going rate reaches this
+  // function and has to be described honestly. Telling Ryan a card is cheap
+  // when it is 9% over the market is how he stops believing the other lines.
+  const priced = r.edge != null && Number.isFinite(r.edge) && r.compAud > 0;
+  if (priced && r.edge < 0.10) {
+    if (r.edge < -0.02) return isTarget(r) ? 'One of your guys, but you are paying up' : 'Above what comparable cards ask';
+    if (r.edge < 0.02) return isTarget(r) ? 'One of your guys, at about the going rate' : 'About what these go for';
+    return isTarget(r) ? 'One of your guys, a little under the going rate' : 'A little under what these go for';
+  }
+  if (!priced) {
+    if (isTarget(r)) return 'One of your guys, and nothing to price it against';
+    return 'Nothing comparable in this scan to price it against';
+  }
+
   if (isTarget(r)) return 'One of your guys, and it is cheap';
   if (isSuspicious(r)) return 'Looks too good, worth eyeballing';
   const t = r.dynTrend30 ?? 0;
@@ -186,18 +246,28 @@ function evaluate(r) {
   if (r.bestOffer) tags.push('OFFERS');
   if (r.country && r.country !== 'AU') tags.push('IMPORT');
 
+  // Shout-worthy: the two things Ryan asked to be told about.
+  const shout = call === 'STRONG BUY' || (isTarget(r) && ['BUY', 'STRONG BUY'].includes(call));
+  const reasons = alertReasons(r, { call, shout });
+  if (reasons.includes('PROFILE') && !tags.includes('BOOM ROOKIE')) tags.push('PROFILE');
+
   return {
     call,
     tags,
     hook: hook(r),
     headline: `${r.player} ${cardLine(r)} - ${call}`,
     take: reasoning(r),
-    // Shout-worthy: the two things Ryan asked to be told about.
-    shout: call === 'STRONG BUY' || (isTarget(r) && ['BUY', 'STRONG BUY'].includes(call)),
+    shout,
+    // Why this card is in the email, strongest reason first. Empty means it
+    // is not. Read by notify.js and alert.js so the bar is defined once.
+    reasons,
   };
 }
 
 const RANK = { 'STRONG BUY': 0, 'BUY': 1, 'CHECK': 2, 'WATCH': 3, 'FAIR': 4, 'PASS': 5, 'SKIP': 6 };
 const byCall = (a, b) => (RANK[a.verdict?.call] ?? 9) - (RANK[b.verdict?.call] ?? 9) || (b.score ?? 0) - (a.score ?? 0);
 
-module.exports = { evaluate, decide, isBoomRookie, isTarget, byCall, RANK };
+module.exports = {
+  evaluate, decide, isBoomRookie, isTarget, byCall, RANK,
+  isAlwaysAlert, fitsProfile, alertReasons,
+};

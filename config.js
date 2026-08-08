@@ -234,6 +234,52 @@ module.exports = {
 
     maxPerEmail: 10,
 
+    /* Three reasons a card earns an email. A card can qualify on more than
+     * one; it is shown once, under the strongest reason, and the others are
+     * named on the row so it is obvious why it is there.
+     *
+     *   TARGET   a player flagged alwaysAlert in data/my-players.json. Any
+     *            call, any discount, including the ones the tool rates badly.
+     *            Ryan asked to hear about these whatever the numbers say.
+     *   DEAL     the existing bar: a strong call, or a BUY.
+     *   PROFILE  the shape Ryan is hunting, independent of any valuation.
+     *
+     * PROFILE deliberately carries no discount test and no dynasty rank test.
+     * It answers "is this the kind of card I want to own at this price", which
+     * is a question about the card, not about the market. That also makes it
+     * the one reason here that can fire on a card the tool cannot value.
+     */
+    reasons: {
+      // Named targets alert at any call. Turn off to put them back on the
+      // ordinary DEAL bar.
+      targetAnyCall: true,
+
+      profile: {
+        enabled: true,
+        maxExp: 1,          // 0 rookie, 1 second year. First or second year only.
+        grade: 10,          // PSA 10 only. A 9 has to earn its place elsewhere.
+        maxAskUsd: 200,     // the asking price, not the landed cost
+        // Guess, and the one to reach for if this floods the inbox. null means
+        // any player at all, including men nobody rates, which is what Ryan
+        // asked for. A number here caps it at that dynasty rank.
+        maxDynRank: null,
+      },
+    },
+
+    /* Per-section caps. Targets and profile cards are capped separately from
+     * the buys, so a flood of one cannot bury the other.
+     *
+     * maxTargets is deliberately high. Everything that clears the bar is
+     * marked as emailed whether or not it fitted, which is what stops the cap
+     * becoming a drip feed, but it also means a trimmed card is one Ryan never
+     * sees. That is an acceptable trade for the hundreds of ordinary buys and
+     * a bad one for the two men he asked to be told about every time. With two
+     * named players this should never bind; it is here as a runaway guard for
+     * the day the target list grows.
+     */
+    maxTargets: 25,
+    maxProfile: 8,
+
     // Fallbacks only. The real addresses come from the ALERT_FROM and
     // ALERT_TO environment variables, which on GitHub are repository secrets.
     // Kept out of this file deliberately: the repo is public, and a working
