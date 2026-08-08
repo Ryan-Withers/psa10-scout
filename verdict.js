@@ -190,7 +190,7 @@ function evaluate(r) {
     call,
     tags,
     hook: hook(r),
-    headline: `${r.player} ${cardLine(r)} — ${call}`,
+    headline: `${r.player} ${cardLine(r)} - ${call}`,
     take: reasoning(r),
     // Shout-worthy: the two things Ryan asked to be told about.
     shout: call === 'STRONG BUY' || (isTarget(r) && ['BUY', 'STRONG BUY'].includes(call)),

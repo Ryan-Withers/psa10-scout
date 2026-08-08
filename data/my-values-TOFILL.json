@@ -1,6 +1,7 @@
 {
   "_README": "PRE-FILLED FROM YOUR OWN LIVE EBAY SCAN. These are the 30 cards most commonly listed right now in your budget. Everything is filled in except the price. Put what you believe each sells for in PSA 10 in psa10Usd and delete any card you do not care about. Leave psa10Usd as null and that row is ignored.",
   "_tip": "seenNow and askRange are what eBay is asking today, for reference only. They are asks, not sales, so they run high.",
+  "_howToUse": "This file is a worksheet. Nothing reads it. When a row has a price you believe, move it into data/my-values.json, which is the file the scan actually loads. Rows left at null are skipped, so it is safe to work through these a few at a time.",
   "rows": [
     {
       "year": 2021,

@@ -1,5 +1,5 @@
 /**
- * Guards the two things that have actually broken, both of which were silent.
+ * Guards the three things that have actually broken, all of which were silent.
  *
  *   The sold signal. A scheduled run carries a quarter of the keyword
  *   queries, so a card whose query did not run is invisible while still
@@ -11,6 +11,11 @@
  *   sent turns the cap into a queue that pours the rest of the list into your
  *   inbox over the following runs.
  *
+ *   Blank hand-entered values. The worksheet ships 30 cards with no prices, to
+ *   be filled a few at a time. A blank row that reaches the value index prices
+ *   its card at $0 and suppresses it, and the suppression looks like ordinary
+ *   PASS traffic.
+ *
  * Run: node test-market.js
  */
 
@@ -19,6 +24,9 @@ const fs = require('fs');
 const path = require('path');
 
 const market = require('./market');
+const compare = require('./compare');
+const { buildIndex, matchListing } = require('./match');
+const { scoreListing } = require('./score');
 const { notify, loadSent } = require('./notify');
 const CFG = require('./config');
 
@@ -76,6 +84,54 @@ check('the grace period outlasts a full rotation cycle', () => {
   assert.ok(CFG.market.goneGraceHours * 60 > cycleMinutes,
     `grace ${CFG.market.goneGraceHours}h does not cover a ${cycleMinutes} minute cycle, ` +
     'so cards will be marked sold purely for being outside the current slice');
+});
+
+/* ---------- hand-entered values ---------- */
+
+// my-values-TOFILL.json is a worksheet of 30 cards with the prices blank, to
+// be filled a few at a time. A blank row used to survive into the value index
+// at $0, match the real card at high confidence, and price it at nothing. The
+// card was then binned with a NaN score, and because a comp had matched, it
+// never reached the comparable-pool fallback that would have valued it. A
+// half-filled worksheet blinded the tool on its own 30 most-listed cards.
+
+const blank = { year: 2021, set: 'prizm', insert: null, parallel: null, player: 'Kyle Pitts', cardNo: '108', serialOf: null, psa10Usd: null };
+const priced = { year: 2023, set: 'prizm', insert: 'rookie auto', parallel: 'silver', player: 'Bryce Young', cardNo: 'RA-BY', serialOf: null, psa10Usd: 180 };
+
+check('a row with no price never becomes a value', () => {
+  const rows = market.handValueRows({ rows: [blank, priced, { ...blank, player: 'Bad Number', psa10Usd: 'n/a' }, { ...blank, player: 'Negative', psa10Usd: -5 }] });
+  assert.deepStrictEqual(rows.map((r) => r.player), ['Bryce Young'],
+    'a priceless row reached the value index, where it prices its card at $0');
+  assert.ok(rows.every((r) => r.psa10UsdCents > 0), 'a value row carries a non-positive price');
+});
+
+check('a card left blank on the worksheet still gets a comparable estimate', () => {
+  const parsed = {
+    player: 'Kyle Pitts', year: 2021, set: 'prizm', insert: null, parallel: null,
+    cardNo: '108', serial: null, grade: 10, confidence: 90,
+    pos: 'TE', exp: 4, age: 24, dynRank: 40, dynTrend30: 0, team: 'ATL', debut: 2021,
+    warnings: [],
+  };
+  const listing = {
+    itemId: 'P1', title: '2021 Prizm Kyle Pitts 108 PSA 10', url: 'https://example.invalid',
+    price: 60, currency: 'USD', shipping: 15, shippingUnknown: false,
+    country: 'US', feedbackPct: 99, feedbackScore: 500,
+  };
+  // Five alike cards, which is what compare.js needs before it will price one.
+  const pools = compare.buildPools(
+    Array.from({ length: compare.MIN_POOL }, () => ({ parsed, askAud: 300 }))
+  );
+
+  const index = buildIndex(market.handValueRows({ rows: [blank] }));
+  const m = matchListing(parsed, index);
+  assert.strictEqual(m.comp, null, 'a blank worksheet row was matched as if it were a value');
+
+  const scored = scoreListing(listing, parsed, m, fx, pools);
+  assert.strictEqual(scored.valueSource, 'comparable',
+    'the card did not fall through to the comparable pool');
+  assert.ok(Number.isFinite(scored.score) && Number.isFinite(scored.edge),
+    `blank price produced a non-finite score: edge ${scored.edge}, score ${scored.score}`);
+  assert.ok(scored.compAud > 0, `card valued at ${scored.compAud}`);
 });
 
 /* ---------- alert dedupe ---------- */
