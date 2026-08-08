@@ -42,6 +42,25 @@ function isAlwaysAlert(r) {
 }
 
 /**
+ * One of Ryan's men, for the purpose of what the email SAYS.
+ *
+ * my-players.json offers two independent switches and its own note calls them
+ * deliberately separate: conviction is how much he rates a player, alwaysAlert
+ * is whether he wants his phone to buzz. Setting alwaysAlert with conviction
+ * left at 1.0 is therefore an invited configuration, and it used to produce a
+ * card that earned the TARGET reason, arrived in the targets section, and then
+ * carried no TARGET tag and no "one of yours" line, so the email never said
+ * why it was there.
+ *
+ * Copy and tagging use this. The scoring multipliers deliberately still use
+ * isTarget, because how much a card is worth having is a question about
+ * conviction, not about notifications.
+ */
+function isNamed(r) {
+  return isTarget(r) || isAlwaysAlert(r);
+}
+
+/**
  * The shape Ryan is hunting, judged on the card rather than on the market:
  * a first or second year man, PSA 10, asking under the ceiling.
  *
@@ -89,6 +108,43 @@ function alertReasons(r, { call, shout }) {
   if (shout || call === 'BUY') out.push('DEAL');
   if (fitsProfile(r)) out.push('PROFILE');
   return out;
+}
+
+/**
+ * A listing of one of your men that the parser could not read well enough to
+ * price, but read well enough to be sure who is on it.
+ *
+ * Dropped rows never get a verdict, so "tell me about these every time" quietly
+ * stopped at the parse gate. That gate fires on titles the tool understood only
+ * partly: player and year resolved, set missing, so confidence is capped at 45.
+ * A genuine Burden auto with an unusual set name lands there and is binned.
+ *
+ * Only the confidence gate qualifies. The other gates are correctness gates,
+ * and their answers are right: a lot, a break, a raw card and a card whose
+ * title denies an autograph are all genuinely not what Ryan asked for. A
+ * college card is excluded by his own brief.
+ *
+ * The player still has to be trustworthy. parse.js resolves the player against
+ * the Sleeper index independently of the overall score, and flags a collision
+ * it could not settle with ambiguous-player. Without that warning, a low score
+ * means "I could not read the card", not "I could not read the name".
+ *
+ * Returns a verdict carrying no call and no price, because there is neither.
+ */
+function unreadTarget(r) {
+  if (!isAlwaysAlert(r)) return null;
+  if (!/^parse-confidence/.test(String(r.dropped || ''))) return null;
+  if (!r.player || (r.warnings || []).includes('ambiguous-player')) return null;
+  return {
+    call: 'UNREAD',
+    tags: ['TARGET'],
+    hook: 'One of your guys, but the title beat the parser',
+    headline: `${r.player} - could not read the card`,
+    take: 'One of your men by name, but the title did not give up enough to price it. Worth ten seconds of your own eyes.',
+    shout: false,
+    unread: true,
+    reasons: ['TARGET'],
+  };
 }
 
 // A discount this size on a card we can price is either the find of the week
@@ -206,7 +262,7 @@ function reasoning(r) {
     out.push('One of one, so there is no comparable and no way to value it from data. Your call entirely.');
   } else if (r.valueConfidence === 1) {
     out.push(`Thin evidence though, priced off ${r.valueN} cards of similar rarity from other sets.`);
-  } else if (isTarget(r)) {
+  } else if (isNamed(r)) {
     out.push('One of your named targets.');
   } else if (isBoomRookie(r) && r.edge != null && r.edge >= 0.15) {
     out.push('Early career, well rated and not falling, which is the profile you are hunting.');
@@ -233,16 +289,16 @@ function hook(r) {
   // when it is 9% over the market is how he stops believing the other lines.
   const priced = r.edge != null && Number.isFinite(r.edge) && r.compAud > 0;
   if (priced && r.edge < 0.10) {
-    if (r.edge < -0.02) return isTarget(r) ? 'One of your guys, but you are paying up' : 'Above what comparable cards ask';
-    if (r.edge < 0.02) return isTarget(r) ? 'One of your guys, at about the going rate' : 'About what these go for';
-    return isTarget(r) ? 'One of your guys, a little under the going rate' : 'A little under what these go for';
+    if (r.edge < -0.02) return isNamed(r) ? 'One of your guys, but you are paying up' : 'Above what comparable cards ask';
+    if (r.edge < 0.02) return isNamed(r) ? 'One of your guys, at about the going rate' : 'About what these go for';
+    return isNamed(r) ? 'One of your guys, a little under the going rate' : 'A little under what these go for';
   }
   if (!priced) {
-    if (isTarget(r)) return 'One of your guys, and nothing to price it against';
+    if (isNamed(r)) return 'One of your guys, and nothing to price it against';
     return 'Nothing comparable in this scan to price it against';
   }
 
-  if (isTarget(r)) return 'One of your guys, and it is cheap';
+  if (isNamed(r)) return 'One of your guys, and it is cheap';
   if (isSuspicious(r)) return 'Looks too good, worth eyeballing';
   const t = r.dynTrend30 ?? 0;
   if (isBoomRookie(r) && t >= 150) return 'Young, top-60, and the market is moving to him';
@@ -257,14 +313,14 @@ function hook(r) {
 function evaluate(r) {
   const call = decide(r);
   const tags = [];
-  if (isTarget(r)) tags.push('TARGET');
+  if (isNamed(r)) tags.push('TARGET');
   if (isBoomRookie(r)) tags.push('BOOM ROOKIE');
   if ((r.grade ?? 10) === 9) tags.push('PSA 9');
   if (r.bestOffer) tags.push('OFFERS');
   if (r.country && r.country !== 'AU') tags.push('IMPORT');
 
   // Shout-worthy: the two things Ryan asked to be told about.
-  const shout = call === 'STRONG BUY' || (isTarget(r) && ['BUY', 'STRONG BUY'].includes(call));
+  const shout = call === 'STRONG BUY' || (isNamed(r) && ['BUY', 'STRONG BUY'].includes(call));
   const reasons = alertReasons(r, { call, shout });
   if (reasons.includes('PROFILE') && !tags.includes('BOOM ROOKIE')) tags.push('PROFILE');
 
@@ -286,5 +342,5 @@ const byCall = (a, b) => (RANK[a.verdict?.call] ?? 9) - (RANK[b.verdict?.call] ?
 
 module.exports = {
   evaluate, decide, isBoomRookie, isTarget, byCall, RANK,
-  isAlwaysAlert, fitsProfile, alertReasons,
+  isAlwaysAlert, isNamed, fitsProfile, alertReasons, unreadTarget,
 };

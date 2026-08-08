@@ -28,7 +28,7 @@ const compare = require('./compare');
 const { buildIndex, matchListing } = require('./match');
 const { scoreListing } = require('./score');
 const { notify, loadSent, alertPopulation } = require('./notify');
-const { evaluate } = require('./verdict');
+const { evaluate, unreadTarget } = require('./verdict');
 const { selectAlerts, buildAlert } = require('./alert');
 const { setConviction } = require('./score');
 const CFG = require('./config');
@@ -154,6 +154,10 @@ const row = (over = {}) => ({
   valueConfidence: 3, score: 0.05, url: 'https://example.invalid', ...over,
 });
 const reasonsFor = (over) => { const r = row(over); return evaluate(r).reasons; };
+const emailFor = (rows) => {
+  const sel = selectAlerts(rows);
+  return { sel, mail: buildAlert(sel, {}) };
+};
 
 check('a named target is emailed even when the call is bad', () => {
   const r = row({ player: 'Luther Burden III', conviction: 1.4, alwaysAlert: true, edge: -0.2, landedAud: 600 });
@@ -210,6 +214,55 @@ check('an ordinary card that is not a deal earns no email', () => {
     'a card qualifying on nothing was still queued for the email');
 });
 
+check('a player flagged alwaysAlert is named as one of yours, whatever his conviction', () => {
+  // my-players.json offers the two switches independently and its own note
+  // calls them separate. Setting alwaysAlert with conviction left at 1.0 used
+  // to produce a card that arrived in the targets section carrying no TARGET
+  // tag and no "one of yours" line, so the email never said why it was there.
+  const v = evaluate(row({ conviction: 1.0, alwaysAlert: true, edge: -0.1, landedAud: 500, compAud: 455 }));
+  assert.ok(v.reasons.includes('TARGET'), 'alwaysAlert did not earn the reason');
+  assert.ok(v.tags.includes('TARGET'), 'the card is in the email because he is one of yours, and the email does not say so');
+  assert.ok(/one of your/i.test(v.hook), `the hook does not name him as one of yours: "${v.hook}"`);
+
+  // And on the other side of the price fork, where a different line writes it.
+  const cheap = evaluate(row({ conviction: 1.0, alwaysAlert: true, edge: 0.4, landedAud: 300, compAud: 500 }));
+  assert.ok(/one of your/i.test(cheap.hook), `the cheap-card hook does not name him either: "${cheap.hook}"`);
+});
+
+check('the same man spelled with and without a suffix is one player, not two', () => {
+  // The Sleeper index stores men without a suffix while sellers type them with
+  // one. Plain lowercasing let the one-card-per-player sections show him twice
+  // and spend two slots on it.
+  const a = row({ itemId: 'S1', player: 'Marvin Harrison Jr.', edge: 0.2, score: 1, dynRank: 30 });
+  const b = row({ itemId: 'S2', player: 'Marvin Harrison', edge: 0.19, score: 0.9, dynRank: 30 });
+  [a, b].forEach((r) => { r.verdict = evaluate(r); });
+  const { sel } = emailFor([a, b]);
+  const displayed = [...sel.act, ...sel.also, ...sel.targets, ...sel.profile];
+  assert.strictEqual(displayed.length, 1,
+    `one man appeared ${displayed.length} times because of how the seller spelled his name`);
+});
+
+check('a numbered card says so in the email, even when it cannot be valued', () => {
+  // serialOf was only set on the two priced branches, so a numbered card that
+  // could not be valued reached the email with no mention of its print run.
+  // The one-of-ones are exactly the cards that cannot be valued.
+  const parsed = {
+    player: 'Emeka Egbuka', year: 2025, set: 'prizm', insert: 'rookie auto', parallel: 'gold',
+    cardNo: null, serial: { num: 3, of: 25 }, grade: 10, confidence: 90,
+    pos: 'WR', exp: 1, age: 23, team: 'TB', debut: 2025, dynRank: 27, dynTrend30: 100, warnings: [],
+  };
+  const l = {
+    itemId: 'SER', title: 't', url: 'https://example.invalid',
+    price: 190, currency: 'USD', shipping: 15, shippingUnknown: false,
+    country: 'US', feedbackPct: 99, feedbackScore: 500,
+  };
+  const scored = scoreListing(l, parsed, { comp: null, matchConfidence: 0, reason: 'x' }, fx, null);
+  assert.strictEqual(scored.serialOf, 25, 'scoreListing did not carry the print run onto an unvalued card');
+  scored.verdict = evaluate(scored);
+  const { mail } = emailFor([scored]);
+  assert.ok(/\/25/.test(mail.text), `the email does not mention the print run: ${mail.text.split('\n').find((x) => /Prizm/.test(x))}`);
+});
+
 check('a genuine deal still earns DEAL on its own', () => {
   // The oldest of the three reasons, and the one every other test takes for
   // granted by hardcoding reasons: ['DEAL'] into its fixture.
@@ -247,11 +300,6 @@ check('the profile does not need a valuation', () => {
  *
  * These assertions run a card the whole way to rendered email text.
  */
-
-const emailFor = (rows) => {
-  const sel = selectAlerts(rows);
-  return { sel, mail: buildAlert(sel, {}) };
-};
 
 check('a named target at a bad call reaches the rendered email', () => {
   const r = row({ itemId: 'T1', player: 'Luther Burden III', conviction: 1.4, alwaysAlert: true, edge: -0.25, landedAud: 600, compAud: 480 });
@@ -410,6 +458,43 @@ check('the subject counts your men, not their listings', () => {
   const h1 = (mail.html.match(/font-size:20px[^>]*>([^<]*)</) || [])[1] || '';
   assert.ok(!/[3-9]\d* of your guys/.test(h1),
     `the email heading counted listings as people: "${h1}"`);
+});
+
+/* ---------- named men the parser could not read ---------- */
+
+// Dropped rows never get a verdict, so "tell me every time" used to stop at
+// the parse gate. Only the confidence gate qualifies: the others are
+// correctness gates and their answers are right.
+const dropped = (over = {}) => ({
+  itemId: 'D1', title: '2025 Odd Set Luther Burden III RC Auto PSA 10 GEM MINT',
+  url: 'https://example.invalid', player: 'Luther Burden',
+  alwaysAlert: true, warnings: [], dropped: 'parse-confidence-45', ...over,
+});
+
+check('only the confidence gate produces an unreadable target', () => {
+  assert.ok(unreadTarget(dropped()), 'a target the parser half-read was binned silently');
+  assert.ok(!unreadTarget(dropped({ dropped: 'college-card-2024-vs-debut-2025' })), 'a college card was surfaced, against the brief');
+  assert.ok(!unreadTarget(dropped({ dropped: 'gate:no-psa-grade-claim' })), 'a raw card was surfaced as a PSA auto');
+  assert.ok(!unreadTarget(dropped({ dropped: 'gate:auto-explicitly-denied' })), 'a card whose title denies an autograph was surfaced');
+  assert.ok(!unreadTarget(dropped({ dropped: 'gate:junk:lot' })), 'a card lot was surfaced');
+  assert.ok(!unreadTarget(dropped({ warnings: ['ambiguous-player'] })), 'a name the parser could not settle was claimed as one of yours');
+  assert.ok(!unreadTarget(dropped({ alwaysAlert: false })), 'an unreadable card for a player you never named was surfaced');
+});
+
+check('an unreadable target reaches the email carrying no price and no call', () => {
+  const r = dropped();
+  r.verdict = unreadTarget(r);
+  const pop = alertPopulation([], [], [r]);
+  assert.strictEqual(pop.length, 1, 'an unreadable target never reached the notifier');
+
+  const sel = selectAlerts(pop);
+  assert.strictEqual(sel.unread.length, 1, 'it reached the notifier but no section of the email');
+  const mail = buildAlert(sel, {});
+  assert.ok(mail.text.includes('https://example.invalid'), 'the link is missing, which is the only actionable thing on the row');
+  assert.ok(!/\$/.test(mail.text.split('COULD NOT READ THESE')[1] || ''),
+    'a card with no valuation printed a price');
+  assert.ok(!/NaN|undefined/.test(mail.html), 'the rendered card carries NaN or undefined');
+  assert.ok(!/Nothing worth flagging/.test(mail.subject), `subject says nothing was found: "${mail.subject}"`);
 });
 
 check('a card appears in exactly one section of the email', () => {

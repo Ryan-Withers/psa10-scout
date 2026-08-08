@@ -21,7 +21,7 @@ const { buildIndex, matchListing } = require('./match');
 const { scoreListing, setConviction } = require('./score');
 const market = require('./market');
 const compare = require('./compare');
-const { evaluate, byCall } = require('./verdict');
+const { evaluate, byCall, unreadTarget } = require('./verdict');
 const { notify, alertPopulation } = require('./notify');
 
 (async () => {
@@ -103,6 +103,14 @@ const { notify, alertPopulation } = require('./notify');
   const buys = results.filter((r) => !r.dropped && !r.unpriced).sort(byCall);
   const look = results.filter((r) => r.unpriced).sort((a, b) => (b.interest ?? 0) - (a.interest ?? 0));
   const ignored = results.filter((r) => r.dropped);
+
+  // A named target the parser could not read is still a named target. These
+  // carry no call and no price, only a name and a link. See verdict.unreadTarget.
+  const unread = [];
+  for (const r of ignored) {
+    const v = unreadTarget(r);
+    if (v) { r.verdict = v; unread.push(r); }
+  }
   const shouts = buys.filter((r) => r.verdict?.shout);
 
   // A real sweep returns thousands of listings. Writing every one of them,
@@ -182,7 +190,7 @@ const { notify, alertPopulation } = require('./notify');
    * is sent, so a Resend outage costs an email and not the scan.
    */
   try {
-    const r = await notify(alertPopulation(buys, look), {
+    const r = await notify(alertPopulation(buys, look, unread), {
       placeholder: P.SOURCE !== 'live',
       dryRun: process.env.ALERT_DRY_RUN === '1',
     });

@@ -155,6 +155,10 @@ function scoreListing(listing, parsed, match, fx, comparePools = null) {
     // alerting and scoreListing has five different exits. A card that cannot
     // be valued still has an asking price and can still be one of your men.
     alwaysAlert: conviction(parsed.player).alwaysAlert,
+    // Was only set on the two priced branches, so a numbered card that could
+    // not be valued reached the email with no mention of its print run. The
+    // one-of-ones are exactly the cards that cannot be valued.
+    serialOf: parsed.serial?.of ?? null,
     askUsd: round2(listing.currency === 'AUD'
       ? listing.price / (fx.usdToAud || 1)
       : listing.price),

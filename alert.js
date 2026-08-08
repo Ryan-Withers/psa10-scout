@@ -53,7 +53,11 @@ function cardName(r) {
   // way. Without stripping the overlap this reads "Prizm Prizm Silver".
   const parallel = String(r.parallel || '')
     .split(/\s+/).filter((w) => w && !setWords.has(w.toLowerCase())).join(' ');
-  return [r.year, titleCase(set), parallel ? titleCase(parallel) : null, 'auto']
+  // Print run belongs in the name. A /25 and a base card out of the same set
+  // are different assets, and on the cards that cannot be valued at all it is
+  // often the only hard fact the email has to offer.
+  const serial = r.serialOf === 1 ? '1/1' : r.serialOf > 0 ? `/${r.serialOf}` : null;
+  return [r.year, titleCase(set), parallel ? titleCase(parallel) : null, serial, 'auto']
     .filter(Boolean).join(' ');
 }
 
@@ -82,7 +86,17 @@ function cardName(r) {
  */
 function selectAlerts(rows) {
   const A = CFG.alert;
-  const name = (r) => String(r.player || '').toLowerCase();
+  /**
+   * Same normalisation the conviction lookup uses, and for the same reason.
+   * The Sleeper index stores men without a suffix while sellers type them with
+   * one, so "Marvin Harrison Jr." and "Marvin Harrison" are two keys for one
+   * man. Plain lowercasing let the one-card-per-player sections show him twice
+   * and spend two slots on it.
+   */
+  const name = (r) => String(r.player || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[.'`]/g, '').replace(/\s+(jr|sr|ii|iii|iv|v)$/i, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
   const has = (r, reason) => (r.verdict?.reasons || []).includes(reason);
 
   // One card per player. Three Zay Flowers cards in a row reads like spam
@@ -120,6 +134,11 @@ function selectAlerts(rows) {
 
   const shown = new Set([...act, ...also].map((r) => r.itemId));
 
+  // Named men the parser could not read. Their own section because they carry
+  // no call and no price, so they cannot sit next to cards that do.
+  const unread = rows.filter((r) => r.verdict?.unread && !shown.has(r.itemId)).slice(0, A.maxTargets);
+  unread.forEach((r) => shown.add(r.itemId));
+
   /**
    * Named targets are NOT collapsed to one card per player. There are two of
    * them and Ryan asked to see every listing, so three different Burden autos
@@ -146,7 +165,7 @@ function selectAlerts(rows) {
         || (a.landedAud ?? 1e9) - (b.landedAud ?? 1e9))
   ).slice(0, A.maxProfile);
 
-  return { act, also, targets, profile };
+  return { act, also, targets, profile, unread };
 }
 
 /* ---------- one card ---------- */
@@ -272,8 +291,10 @@ function describe(r) {
  * BUYs. A named man merely being listed is the weakest thing in the email, not
  * the strongest, so it now sits below the deals and above nothing else.
  */
-function subject({ act, also, targets: named = [], profile = [] }) {
-  if (!act.length && !also.length && !named.length && !profile.length) return 'Nothing worth flagging';
+function subject({ act, also, targets: named = [], profile = [], unread = [] }) {
+  if (!act.length && !also.length && !named.length && !profile.length && !unread.length) {
+    return 'Nothing worth flagging';
+  }
 
   const targetsInAct = act.filter((r) => (r.verdict?.tags || []).includes('TARGET'));
   if (targetsInAct.length) {
@@ -312,7 +333,14 @@ function subject({ act, also, targets: named = [], profile = [] }) {
       : `${men[0]} is listed`;
   }
 
-  return `${profile.length} young PSA 10 auto${profile.length === 1 ? '' : 's'} asking under $${CFG.alert.reasons.profile.maxAskUsd} USD`;
+  if (profile.length) {
+    return `${profile.length} young PSA 10 auto${profile.length === 1 ? '' : 's'} asking under $${CFG.alert.reasons.profile.maxAskUsd} USD`;
+  }
+
+  const unreadMen = [...new Set(unread.map((r) => String(r.player || 'one of yours')))];
+  return unreadMen.length === 1
+    ? `${unreadMen[0]} listed, but the title beat the parser`
+    : `${unreadMen.length} of your guys listed, titles the parser could not read`;
 }
 
 /* ---------- render ---------- */
@@ -320,7 +348,7 @@ function subject({ act, also, targets: named = [], profile = [] }) {
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function buildAlert(selection, { placeholder = false, trimmed = 0 } = {}) {
-  const { act = [], also = [], targets = [], profile = [] } = selection;
+  const { act = [], also = [], targets = [], profile = [], unread = [] } = selection;
   const P = CFG.alert.reasons.profile;
 
   // Said plainly, because these two sections are not claims that the card is
@@ -334,16 +362,29 @@ function buildAlert(selection, { placeholder = false, trimmed = 0 } = {}) {
    * arrive at any call, so on a run carrying either, the sentence was a claim
    * the email itself disproved two inches further down.
    */
-  const onlyDeals = !targets.length && !profile.length;
+  const unreadWhy = 'One of your men by name, but the title did not give up enough to price the card.';
+
+  // Title and link only. No call, no price, because there is neither, and a
+  // row that looks like the others would imply the tool has an opinion.
+  const unreadHtml = (r) => `<div style="padding:9px 11px;margin-bottom:6px;background:#ffffff;border:1px solid #e5e3df;border-radius:6px">
+<div style="font-size:13px;font-weight:600;color:#1a1a1a;margin-bottom:2px">${esc(r.player || 'One of yours')}</div>
+<div style="font-size:12px;color:#7a7a7a;line-height:1.4;margin-bottom:5px">${esc(String(r.title || '').slice(0, 150))}</div>
+<a href="${esc(r.url || '')}" style="font-size:12px;color:#0a7d4a;text-decoration:none;font-weight:600">Look at it on eBay &rarr;</a>
+</div>`;
+  const unreadText = (r) => `${r.player || 'One of yours'}\n${String(r.title || '').slice(0, 150)}\n${r.url || ''}`;
+
+  const onlyDeals = !targets.length && !profile.length && !unread.length;
   const strapline = onlyDeals
     ? 'PSA 10 and 9 NFL autos, landed in Australia, under what comparable cards ask'
     : 'PSA 10 and 9 NFL autos, landed in Australia. Not all of these are cheap, see each call.';
 
   // Counts men, not listings. The targets bucket holds one row per card.
   const namedMen = [...new Set(targets.map((r) => String(r.player || '')))];
+  const unreadMen = [...new Set(unread.map((r) => String(r.player || '')))];
   const headline = act.length ? `${act.length} worth acting on`
     : namedMen.length ? `${namedMen.length} of your guys listed`
     : profile.length ? `${profile.length} fit your profile`
+    : unreadMen.length ? `${unreadMen.length} of your guys, unreadable titles`
     : 'Nothing urgent';
 
   // Cards that cleared the bar but did not fit. Said out loud rather than
@@ -365,6 +406,7 @@ function buildAlert(selection, { placeholder = false, trimmed = 0 } = {}) {
     also.length ? '\n\nALSO SOLID\n\n' + also.map(cardText).join('\n\n') : '',
     targets.length ? `\n\nYOUR TARGETS\n${targetsWhy}\n\n` + targets.map(cardText).join('\n\n') : '',
     profile.length ? `\n\nFITS YOUR PROFILE\n${profileWhy}\n\n` + profile.map(cardText).join('\n\n') : '',
+    unread.length ? `\n\nCOULD NOT READ THESE\n${unreadWhy}\n\n` + unread.map(unreadText).join('\n\n') : '',
     more ? '\n\n' + more : '',
     '\n\nValues are estimated from comparable cards in the same scan, not confirmed sales.',
   ].filter(Boolean).join('\n');
@@ -385,6 +427,7 @@ ${act.length ? heading('Worth acting on') + act.map(cardHtml).join('') : ''}
 ${also.length ? heading('Also solid') + also.map(cardHtml).join('') : ''}
 ${targets.length ? heading('Your targets', targetsWhy) + targets.map(cardHtml).join('') : ''}
 ${profile.length ? heading('Fits your profile', profileWhy) + profile.map(cardHtml).join('') : ''}
+${unread.length ? heading('Could not read these', unreadWhy) + unread.map(unreadHtml).join('') : ''}
 ${more ? `<div style="font-size:12px;color:#7a7a7a;background:#eceae6;border-radius:6px;padding:10px 12px;margin-top:12px">${esc(more)}</div>` : ''}
 
 <div style="font-size:11px;color:#9a9a9a;line-height:1.5;margin-top:16px;padding-top:12px;border-top:1px solid #e0ded9">

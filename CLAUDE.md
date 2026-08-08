@@ -93,6 +93,13 @@ index holds Kurt Warner at 47 with exp 0, among 2,775 entries at exp 0 or 1.
 top 60. `fitsProfile` has no rank test, so it carries `requireRostered` and
 `requireRanked` instead. Any new rule keyed on `exp` needs one of the two.
 
+**`conviction` and `alwaysAlert` answer different questions.** Conviction is
+how much Ryan rates a player and it multiplies the score. `alwaysAlert` is
+whether he wants his phone to buzz. `isTarget` (conviction) drives the scoring
+multipliers; `isNamed` (either) drives what the email says. Flagging a player
+alwaysAlert at conviction 1.0 is invited by `my-players.json`, and it used to
+put a card in the targets section with nothing on it saying why.
+
 **Test the delivery, not just the decision.** The first cut of the three-reason
 alerting had six assertions, all stopping at `evaluate()`. Five separate
 mutations that each destroyed the feature outright, including deleting the
