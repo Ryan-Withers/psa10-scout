@@ -41,7 +41,7 @@ async function getListings(fx) {
     return { rows: d.rows, source: 'cached', discovery: d.discovery };
   }
 
-  const { scanMarketplace, querySlice, QUERY_SET } = require('./ebay');
+  const { scanMarketplace, querySlice, QUERY_SET, chooseQueries } = require('./ebay');
   const id = process.env.EBAY_CLIENT_ID;
   const secret = process.env.EBAY_CLIENT_SECRET;
   if (!id || !secret) throw new Error('DATA_SOURCE=live needs EBAY_CLIENT_ID and EBAY_CLIENT_SECRET');
@@ -49,16 +49,25 @@ async function getListings(fx) {
   const maxUsd = Number(process.env.MAX_PRICE_USD || CFG.budget.maxUsd);
   const marketplaces = (process.env.MARKETPLACES || 'EBAY_AU,EBAY_US').split(',').map((s) => s.trim());
 
-  // This run's share of the keyword queries. SCAN_ALL=1 forces the full set,
-  // which is what you want for a one-off sweep from your own machine.
-  const perRun = process.env.SCAN_ALL === '1'
+  /**
+   * A scheduled run searches for the watchlist by name, so a newly listed
+   * card of one of Ryan's men is found on the very next scan rather than
+   * whenever its slice next comes round.
+   *
+   * SCAN_ALL=1 swaps in the old set-based sweep, which is what you want for a
+   * one-off run that rebuilds the comparable pools. It costs 146 searches.
+   */
+  const fullSweep = process.env.SCAN_ALL === '1';
+  const querySource = chooseQueries(getConviction(), { fullSweep });
+
+  const perRun = fullSweep
     ? QUERY_SET.length
     : Number(process.env.QUERIES_PER_RUN || CFG.scan.queriesPerRun);
   // On GitHub, SLICE_INDEX carries the run number so rotation survives the
   // scheduler starting runs late. Locally it is absent and the clock decides.
   const runNo = process.env.SLICE_INDEX === undefined || process.env.SLICE_INDEX === ''
     ? null : Number(process.env.SLICE_INDEX);
-  const slice = querySlice(QUERY_SET, perRun, Date.now(), runNo);
+  const slice = querySlice(querySource, perRun, Date.now(), runNo);
 
   const seen = new Map();
   const discovery = {};

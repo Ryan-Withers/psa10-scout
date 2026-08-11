@@ -37,8 +37,25 @@ function isTarget(r) {
  * hear about these whatever the tool thinks, so this reason ignores the call,
  * the edge and whether the card could be valued at all.
  */
+/**
+ * A man on the watchlist, on a card Ryan would actually consider.
+ *
+ * The brief is "all notifications are PSA 10 autos of those players only", so
+ * this carries the grade and price tests rather than leaving them to a
+ * separate rule. The autograph half is structural: parse.js rejects any title
+ * that does not claim one, so nothing without an auto reaches here at all.
+ *
+ * Everything else about the card is deliberately not tested. Whether it is
+ * cheap, whether it can be valued, whether the tool likes the set: none of
+ * that decides whether Ryan hears about it. He asked to be told when one
+ * appears.
+ */
 function isAlwaysAlert(r) {
-  return CFG.alert.reasons.targetAnyCall === true && r.alwaysAlert === true;
+  if (CFG.alert.reasons.targetAnyCall !== true || r.alwaysAlert !== true) return false;
+  const t = CFG.alert.reasons.target;
+  if ((r.grade ?? 10) !== t.grade) return false;
+  if (!(r.askUsd > 0) || r.askUsd > t.maxAskUsd) return false;
+  return true;
 }
 
 /**
@@ -105,7 +122,7 @@ function fitsProfile(r) {
 function alertReasons(r, { call, shout }) {
   const out = [];
   if (isAlwaysAlert(r)) out.push('TARGET');
-  if (shout || call === 'BUY') out.push('DEAL');
+  if (CFG.alert.reasons.deal.enabled && (shout || call === 'BUY')) out.push('DEAL');
   if (fitsProfile(r)) out.push('PROFILE');
   return out;
 }

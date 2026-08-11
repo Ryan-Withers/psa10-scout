@@ -124,11 +124,24 @@ function selectAlerts(rows) {
    * Building the set from what is actually rendered means a card cut by one
    * section's cap falls through to the next section it qualifies for.
    */
-  const act = bestPerPlayer(rows.filter((r) => r.verdict?.shout).sort(byCall))
+  /**
+   * Both deal sections are gated on the DEAL reason, not on the call alone.
+   *
+   * They used to select on verdict.shout, which is computed from the call and
+   * knows nothing about whether dealing is switched on. With DEAL off, a
+   * STRONG BUY of a player nobody named still landed in act and was rendered,
+   * while notify built its sent-list from rows that carry a reason. Shown but
+   * never marked means emailed again on every single scan, forever.
+   *
+   * Selecting on the reason keeps the two in step: switch DEAL off in config
+   * and these sections empty out, which is the whole intent.
+   */
+  const act = bestPerPlayer(rows.filter((r) => has(r, 'DEAL') && r.verdict?.shout).sort(byCall))
     .slice(0, A.maxPerEmail);
   const actNames = new Set(act.map(name));
   const also = bestPerPlayer(
-    rows.filter((r) => !r.verdict?.shout && r.verdict?.call === 'BUY' && !actNames.has(name(r)))
+    rows.filter((r) => has(r, 'DEAL') && !r.verdict?.shout && r.verdict?.call === 'BUY'
+      && !actNames.has(name(r)))
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
   ).slice(0, Math.max(0, Math.min(5, A.maxPerEmail - act.length)));
 
@@ -144,9 +157,11 @@ function selectAlerts(rows) {
    * them and Ryan asked to see every listing, so three different Burden autos
    * are three things to look at, not spam. Best call first.
    */
+  // Primaries above secondaries, then best call first inside each. Conviction
+  // orders the email; it does not decide what is in it.
   const targets = rows
     .filter((r) => has(r, 'TARGET') && !shown.has(r.itemId))
-    .sort(byCall)
+    .sort((a, b) => (b.conviction ?? 1) - (a.conviction ?? 1) || byCall(a, b))
     .slice(0, A.maxTargets);
   targets.forEach((r) => shown.add(r.itemId));
 
@@ -373,10 +388,14 @@ function buildAlert(selection, { placeholder = false, trimmed = 0 } = {}) {
 </div>`;
   const unreadText = (r) => `${r.player || 'One of yours'}\n${String(r.title || '').slice(0, 150)}\n${r.url || ''}`;
 
+  // Says PSA 10 rather than "PSA 10 and 9" because a 9 no longer earns an
+  // email. If reasons.deal is ever switched back on, the first line applies
+  // again and 9s come with it.
+  const grades = CFG.alert.reasons.deal.enabled ? 'PSA 10 and 9' : 'PSA 10';
   const onlyDeals = !targets.length && !profile.length && !unread.length;
   const strapline = onlyDeals
-    ? 'PSA 10 and 9 NFL autos, landed in Australia, under what comparable cards ask'
-    : 'PSA 10 and 9 NFL autos, landed in Australia. Not all of these are cheap, see each call.';
+    ? `${grades} NFL autos, landed in Australia, under what comparable cards ask`
+    : `${grades} autographs of your players, landed in Australia. Not all of these are cheap, see each call.`;
 
   // Counts men, not listings. The targets bucket holds one row per card.
   const namedMen = [...new Set(targets.map((r) => String(r.player || '')))];
