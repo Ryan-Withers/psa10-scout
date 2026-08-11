@@ -581,11 +581,47 @@ const buy = (id, call) => ({
       assert.strictEqual(fourth.sent, 1, `expected 1 alert for the new card, got ${fourth.sent}`);
     });
 
+    /* ---- the catch-up run ---- */
+
+    // Everything already on eBay when a watchlist starts has been there for
+    // weeks and none of it is new, so the first run has to ignore the record.
+    // Uncapping matters as much: every candidate is marked sent whether or not
+    // it fitted, so a capped catch-up would bin the overflow permanently.
+    const catchUpSet = Array.from({ length: 30 }, (_, i) => buy(`C${i}`, 'BUY'));
+    catchUpSet.forEach((r) => {
+      r.player = `Catchup ${r.itemId}`;
+      r.conviction = 1.5;
+      r.alwaysAlert = true;
+      r.verdict = { ...r.verdict, tags: ['TARGET'], reasons: ['TARGET'], hook: 'one of yours' };
+    });
+
+    // Send them once so every one of them is in the record.
+    await notify(catchUpSet, {});
+    const already = await notify(catchUpSet, {});
+    check('the record is doing its job before the catch-up', () => {
+      assert.strictEqual(already.sent, 0, 'the fixture is wrong, these should already be suppressed');
+    });
+
+    process.env.ALERT_RESEND_ALL = '1';
+    const catchUp = await notify(catchUpSet, {});
+    delete process.env.ALERT_RESEND_ALL;
+    check('a catch-up run resends everything, uncapped', () => {
+      assert.strictEqual(catchUp.sent, catchUpSet.length,
+        `catch-up showed ${catchUp.sent} of ${catchUpSet.length}. Anything it skips is marked sent and lost.`);
+      assert.strictEqual(catchUp.trimmed, 0, `${catchUp.trimmed} cards were trimmed from a catch-up run and can never come back`);
+    });
+
+    const afterCatchUp = await notify(catchUpSet, {});
+    check('the run after a catch-up is back to normal', () => {
+      assert.strictEqual(afterCatchUp.sent, 0,
+        `${afterCatchUp.sent} cards resent after the catch-up, so the switch is stuck on`);
+    });
+
     // One per run that had something new: the first, the target-only run, the
-    // improved card, the brand new listing. The runs that found nothing new
-    // must not have sent anything, which is what this number pins.
-    check('exactly four emails left the building', () => {
-      assert.strictEqual(sends(), 4, `${sends()} emails sent, expected 4`);
+    // improved card, the brand new listing, the catch-up seed, the catch-up.
+    // The runs that found nothing new must not have sent anything.
+    check('exactly six emails left the building', () => {
+      assert.strictEqual(sends(), 6, `${sends()} emails sent, expected 6`);
     });
   });
 
