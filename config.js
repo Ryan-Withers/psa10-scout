@@ -35,12 +35,19 @@ module.exports = {
    * the backstop schedule, manual full sweeps at 146 apiece, and retries.
    */
   scan: {
-    // 10 per run puts a full cycle at four runs, about 80 minutes, and daily
-    // searches at roughly 60% of the ceiling. 12 also fits, at 78%, which is
-    // too close once you add a backstop schedule and the occasional manual
-    // full sweep. The price picture does not care about 60 minutes versus
-    // 80; being throttled into silence for a day would matter enormously.
-    queriesPerRun: 10,
+    /* High enough to cover the whole watchlist in one run, which is the point:
+     * a rotation means two runs in three are not looking for a given player,
+     * and the tool's only job now is to notice when one of them is listed.
+     *
+     * At the six-hourly schedule, 25 names costs 2 * (3 + 25 * 2) = 106
+     * searches a run, 424 a day, 8% of the 5,000 ceiling. There is room to
+     * roughly quadruple the watchlist before this needs a thought.
+     *
+     * The 20 minute Cloudflare trigger is the case that breaks it: 72 runs a
+     * day puts even 17 names at 5,328, over the ceiling. Drop this to 12 if
+     * that is ever deployed and accept a two-run cycle.
+     */
+    queriesPerRun: 25,
     // eBay's published daily limit for Browse. Taxonomy and OAuth are
     // metered separately, each with their own allowance, and neither is
     // anywhere near contended.
@@ -254,8 +261,36 @@ module.exports = {
       // ordinary DEAL bar.
       targetAnyCall: true,
 
+      /* The watchlist rule, and currently the only one switched on.
+       *
+       * Ryan's brief: "All notifications are PSA 10 autos of those players
+       * only." Autographs are structural, since parse.js rejects anything
+       * that does not claim one, so the two tests that live here are the
+       * grade and the price.
+       *
+       * maxAskUsd is the asking price in USD before postage, which is the
+       * number on the listing rather than what it costs landed in Australia.
+       * A $190 card from the US lands nearer $420 AUD once postage, GST and
+       * the import charge are on it. Say the word and this becomes a test on
+       * landedAud instead; it is one line.
+       */
+      target: {
+        grade: 10,
+        maxAskUsd: 200,
+      },
+
+      /* The old bargain hunter. Off: Ryan asked for the watchlist only.
+       *
+       * Turning this back on restores STRONG BUY and BUY emails for any
+       * player at all, which is what "too many emails" was about.
+       */
+      deal: { enabled: false },
+
+      // Also off. It was the "any first or second year PSA 10 under $200"
+      // rule, and the watchlist replaced it: the men Ryan wants are named now
+      // rather than described.
       profile: {
-        enabled: true,
+        enabled: false,
         maxExp: 1,          // 0 rookie, 1 second year. First or second year only.
         grade: 10,          // PSA 10 only. A 9 has to earn its place elsewhere.
         maxAskUsd: 200,     // the asking price in USD, not the landed cost

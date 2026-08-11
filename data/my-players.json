@@ -1,18 +1,38 @@
 {
-  "_README": "Your read on players. This is gut feel and it is treated as gut feel: it multiplies the score, it does not pretend to be a price. Above 1 pushes a player up the list, below 1 pushes them down. Add and change freely, nothing else depends on it.",
+  "_README": "The watchlist. This file is now the whole point of the tool: it scans eBay for PSA 10 autographs of these men and nothing else. Adding a player here adds an eBay search for him on the very next run. Removing one stops it.",
+
+  "_howItWorks": "Every player listed gets his own eBay query every scan, so a new listing is found within one cycle rather than waiting for a rotation. Only PSA 10 autographs asking under alert.reasons.target.maxAskUsd are emailed, and each listing is emailed once.",
 
   "_scale": {
-    "1.5": "conviction buy, want every cheap copy",
-    "1.25": "like him, lean in",
-    "1.0": "no opinion, default for everyone not listed",
-    "0.75": "cooling on him",
-    "0.5": "avoid"
+    "1.5": "primary target, high conviction",
+    "1.25": "secondary, want to know",
+    "1.0": "no opinion, default for everyone not listed"
   },
 
-  "_alwaysAlert": "Set true and every listing of that player is emailed once, whatever the tool thinks of the price, including PASS and cards it cannot value. Deliberately separate from conviction: conviction is how much you like a player, this is whether you want your phone to buzz. Leave it off for anyone you merely rate, or the email stops being a shortlist.",
+  "_alwaysAlert": "True means every listing of that man is emailed once, whatever the tool thinks of the price. That is the only reason anything gets emailed now. Set it false to keep a player in the scan without the notifications.",
+
+  "_note": "conviction orders the email, it does not decide what is in it. Primaries sort above secondaries.",
 
   "rows": [
-    { "player": "Luther Burden III", "conviction": 1.4, "alwaysAlert": true, "note": "think he'll be great" },
-    { "player": "Emeka Egbuka", "conviction": 1.4, "alwaysAlert": true, "note": "think he'll be great" }
-  ]
+    { "player": "Emeka Egbuka",      "conviction": 1.5,  "alwaysAlert": true, "note": "primary" },
+    { "player": "Luther Burden III", "conviction": 1.5,  "alwaysAlert": true, "note": "primary" },
+
+    { "player": "Tetairoa McMillan",  "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Matthew Golden",     "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Jack Bech",          "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Jayden Higgins",     "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Terrance Ferguson",  "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Jonathon Brooks",    "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Quinshon Judkins",   "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Omarion Hampton",    "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "TreVeyon Henderson", "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Ladd McConkey",      "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Mac Jones",          "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Tyler Warren",       "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Tyler Shough",       "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Travis Hunter",      "conviction": 1.25, "alwaysAlert": true, "note": "secondary" },
+    { "player": "Jaxson Dart",        "conviction": 1.25, "alwaysAlert": true, "note": "secondary" }
+  ],
+
+  "_2026rookies": "No cards exist yet. Add each name here as the class is drafted and their autos start printing; one row is all it takes and the scan picks it up on the next run."
 }

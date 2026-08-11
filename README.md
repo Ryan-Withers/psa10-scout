@@ -1,13 +1,18 @@
-# PSA 10 NFL autograph scout
+# PSA 10 NFL autograph watchlist
 
-Sweeps eBay Australia and eBay US for PSA 10 and PSA 9 NFL autographs, works
-out what each one actually costs landed in Australia, compares that against
-what similar cards are going for, and emails the ones worth acting on.
+Watches eBay Australia and eBay US for PSA 10 autographs of the players you
+name, works out what each one costs landed in Australia, and emails you when
+one is listed.
 
-Runs itself every 20 minutes on GitHub Actions. Free, nothing to host,
-nothing running on your machine.
+Runs itself on GitHub Actions. Free, nothing to host, nothing on your machine.
 
 **Setup: [GITHUB-SETUP.md](GITHUB-SETUP.md)**
+
+## What gets emailed
+
+One rule: a **PSA 10 autograph**, of a player in `data/my-players.json`,
+asking under **$200 USD**. Each listing is emailed once. Nothing else earns a
+place, however cheap it is.
 
 ## How it decides
 
@@ -20,23 +25,16 @@ nothing running on your machine.
    charges when the seller is overseas.
 4. **Write a call.** STRONG BUY down to SKIP, with a sentence saying why, in
    terms you can check against the row.
-5. **Email the ones worth seeing.** Three reasons earn a place: one of your
-   named targets is listed at all, the card is a genuine deal, or it fits the
-   profile you are hunting (first or second year, PSA 10, asking under $200).
-   Once each. A card only comes round again if its call improves.
-
-## What it is looking for
-
-A highly rated early-career player, which is the profile that moves. A second
-or third year man inside the dynasty top 24 whose value is climbing scores
-highest. College and pre-debut cards are dropped. PSA 9s only appear when the
-player is elite and early career, or the discount is extreme.
+5. **Email it, if it is one of yours.** The call and the price comparison are
+   there so you can judge the listing at a glance. They do not decide whether
+   the email is sent; the watchlist does. Once each, and a card only comes
+   round again if its call improves.
 
 ## The files you edit
 
 | File | What it is |
 | --- | --- |
-| `data/my-players.json` | Players you rate. Multiplies their score. Set `alwaysAlert` to hear about one every time, whatever the price. |
+| `data/my-players.json` | **The watchlist.** Every player here gets his own eBay search and every listing of him is emailed. This is the file that decides what you hear about. |
 | `data/my-values.json` | Cards you know the price of. Trusted over everything else. |
 | `data/my-values-TOFILL.json` | 30 commonly listed cards with the prices left blank. A worksheet. |
 | `data/known-cards.json` | Cards for the sanity check. |
@@ -60,8 +58,9 @@ A live sweep needs the eBay keys:
 EBAY_CLIENT_ID=... EBAY_CLIENT_SECRET=... DATA_SOURCE=live npm run scan
 ```
 
-A scheduled run only takes a third of the search list, because eBay allows
-5,000 searches a day. `SCAN_ALL=1` forces the full set for a one-off sweep.
+A scheduled run searches for your watchlist by name, one query per player, so
+a new listing is found on the very next scan. `SCAN_ALL=1` runs the old wide
+set-based sweep instead, which is what rebuilds the comparable-card pools.
 
 `DATA_SOURCE` also takes `cached`, which re-scores the last live pull without
 spending eBay quota, and `seed`, which uses invented listings. Both write to a

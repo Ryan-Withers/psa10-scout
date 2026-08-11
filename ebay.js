@@ -22,15 +22,52 @@
 const BASE = 'https://api.ebay.com';
 
 /**
- * The whole value engine runs on seeing the same card listed repeatedly and
- * watching which copies clear. So breadth is not a nice-to-have: it is what
- * determines how many weeks until the tool knows anything.
+ * The watchlist queries: one per man in data/my-players.json.
  *
- * The first live run made 9 searches and saw 2,765 AU listings, of which the
- * most-listed single card appeared 5 times, below the threshold to price it.
- * Querying per set rather than in generic phrases is what fixes that, because
- * it forces eBay to show us different slices instead of the same popular
- * results over and over.
+ * The set-based list below was built for bargain hunting, where the job was to
+ * see as much of the market as possible and the rotation was the price of
+ * that breadth. The job now is narrower and harder: notice within one cycle
+ * when a named player's card is listed. A rotation is exactly wrong for that,
+ * because two runs in three a given slice is not being looked at.
+ *
+ * Searching by name instead is both more thorough and cheaper. Seventeen
+ * names cost 2 marketplaces * (3 aspect pages + 17 * 2) = 74 searches a run.
+ * At the six-hourly schedule that is 296 a day, 6% of eBay's 5,000, and every
+ * player is searched every single run.
+ *
+ * If the Cloudflare 20 minute trigger is ever deployed, redo this: 74 a run at
+ * 72 runs a day is 5,328, over the ceiling. Twelve names a run rotates inside
+ * budget at 78%, with a full cycle every other run.
+ */
+function watchQueries(players = []) {
+  return players
+    .filter((p) => p && p.player)
+    .map((p) => `psa 10 ${String(p.player).replace(/\s+(jr|sr|ii|iii|iv|v)\.?$/i, '').trim()} auto`);
+}
+
+/**
+ * Which list a run searches. Watchlist normally, the old set-based sweep for
+ * a deliberate full sweep or if the watchlist is somehow empty, because a
+ * scan that searches for nothing is worse than one that searches too widely.
+ *
+ * Its own function so the choice can be tested. Inline in providers.js it was
+ * one edit away from silently reverting to the set-based sweep, which still
+ * returns plenty of listings and so looks entirely healthy from outside.
+ */
+function chooseQueries(players = [], { fullSweep = false } = {}) {
+  const watch = watchQueries(players);
+  return fullSweep || !watch.length ? QUERY_SET : watch;
+}
+
+/**
+ * Kept for a manual full sweep and for rebuilding the comparable pools, which
+ * still want breadth. Not used by a scheduled run any more.
+ *
+ * The reason it is per-set rather than generic: the first live run made 9
+ * searches and saw 2,765 AU listings, of which the most-listed single card
+ * appeared 5 times, below the threshold to price it. Querying per set forces
+ * eBay to show different slices instead of the same popular results over and
+ * over, and the comparable pools are built out of that breadth.
  */
 const QUERY_SET = [
   // broad
@@ -389,5 +426,5 @@ async function scanMarketplace({
   };
 }
 
-module.exports = { scanMarketplace, discoverCategory, getToken, querySlice, QUERY_SET };
+module.exports = { scanMarketplace, discoverCategory, getToken, querySlice, QUERY_SET, watchQueries, chooseQueries };
 module.exports.callsMade = () => ({ total: CALLS, browse: BROWSE });

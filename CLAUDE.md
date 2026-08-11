@@ -7,13 +7,25 @@ working code over explanation, and asks for one step at a time.
 
 ## What this is
 
-Scans eBay AU and US every 20 minutes for PSA 10 and PSA 9 NFL autographs
-under $250 USD, values each against comparable cards, and emails the ones
-worth acting on. Runs on GitHub Actions. Zero dependencies, Node 18+.
+A watchlist. It scans eBay AU and US for PSA 10 autographs of the players
+named in `data/my-players.json` and emails Ryan when one is listed. Runs on
+GitHub Actions. Zero dependencies, Node 18+.
 
-Target profile: early-career, well-rated players. A second or third year man
-inside the dynasty top 24 whose value is climbing is the peak. Egbuka and
-Burden are named targets in `data/my-players.json`.
+One rule decides everything: **PSA 10, autograph, a man on the watchlist,
+asking under `alert.reasons.target.maxAskUsd`.** Nothing else earns an email.
+Not a 60% discount, not a top-24 dynasty asset, not a rookie fitting the old
+profile. `test-market.js` guards this with "a screaming bargain of a player
+you never named earns nothing", because the old behaviour creeps back easily.
+
+It used to be a bargain hunter across the whole market. That produced too many
+emails for what Ryan actually wanted, which is: tell me when one of my guys
+appears. `alert.reasons.deal` and `alert.reasons.profile` are the old rules,
+both switched off in config rather than deleted. The valuation machinery still
+runs, so each card still carries a call and a price comparison, but the call
+does not decide whether the email is sent.
+
+Adding a player is one row in `my-players.json`. The scan picks it up on the
+next run, including a new eBay query for him.
 
 ## Running it
 
@@ -110,12 +122,16 @@ tested at all. Before trusting a new assertion, revert the guard it covers and
 watch it fail.
 
 **`verdict.reasons` is the only definition of what earns an email.** Three
-reasons: `TARGET` (a player flagged `alwaysAlert` in `my-players.json`, at any
-call, including unpriced), `DEAL` (the old bar, shout or BUY), `PROFILE`
-(first or second year, PSA 10, asking under `maxAskUsd`, no discount test).
-`notify.js` and `alert.js` both read that array. Restating the bar as a
-threshold in either is how the two drift apart and cards get marked sent
-without being shown.
+reasons exist; only `TARGET` is switched on. `notify.js` and `alert.js` both
+read that array. Restating the bar as a threshold in either is how the two
+drift apart and cards get marked sent without being shown.
+
+**Every email section selects on its reason, never on the call.** `act` and
+`also` used to select on `verdict.shout`, which is computed from the call and
+knows nothing about whether `reasons.deal` is enabled. With dealing switched
+off, a STRONG BUY of a player nobody named still rendered into the email while
+`notify` built its sent-list from rows carrying a reason. Shown but never
+marked means emailed again on every scan, forever.
 
 **Anything reaching the email can now be priced above the market.** `hook()`
 and the alert copy used to hardcode the word "under" next to the edge, which
@@ -148,11 +164,16 @@ Restoring it to 20 minutes alongside the trigger doubles eBay usage.
 
 ## Budgets that constrain design
 
-- **eBay: 5,000 Browse searches a day.** Full query set is 146. Hence the
-  rotation in `ebay.js`: 10 queries a run, full cycle every 4 runs, 64% of
-  the ceiling at 20 minute spacing. Taxonomy and OAuth are metered
-  separately and counted separately; do not conflate them when reasoning
-  about headroom. Every run prints its own usage.
+- **eBay: 5,000 Browse searches a day.** A scheduled run searches the
+  watchlist by name, one query per player, no rotation: a rotation would mean
+  two runs in three are not looking for a given man, which is the opposite of
+  the job. 17 names cost `2 marketplaces * (3 aspect pages + 17 * 2)` = 74 a
+  run, 296 a day at the 6-hourly schedule, 6% of the ceiling. Room for roughly
+  four times the current list. `SCAN_ALL=1` still runs the old 146-query
+  set-based sweep, which is what rebuilds the comparable pools. Taxonomy and
+  OAuth are metered separately; do not conflate them. Every run prints usage.
+  **The 20 minute trigger is what breaks this arithmetic**: 74 a run at 72
+  runs a day is 5,328, over the ceiling. Drop `queriesPerRun` to 12 first.
 - **Sleeper: once a day.** `build-player-index.js` reuses a copy under 20
   hours old; the workflow also caches it under the date.
 - GitHub Actions is unlimited on a public repo.

@@ -29,6 +29,7 @@ const { buildIndex, matchListing } = require('./match');
 const { scoreListing } = require('./score');
 const { notify, loadSent, alertPopulation } = require('./notify');
 const { evaluate, unreadTarget } = require('./verdict');
+const { watchQueries, chooseQueries } = require('./ebay');
 const { selectAlerts, buildAlert } = require('./alert');
 const { setConviction } = require('./score');
 const CFG = require('./config');
@@ -139,113 +140,255 @@ check('a card left blank on the worksheet still gets a comparable estimate', () 
 
 /* ---------- what earns an email ---------- */
 
-// Three reasons, and they are not interchangeable. A named target is emailed
-// at any call, including the ones the tool rates badly and the ones it cannot
-// value at all, because Ryan asked to hear about those men every time. A
-// profile card is judged on age, grade and asking price with no reference to
-// discount. Everything else still has to be a deal. The fourth assertion is
-// the one that matters most: without it these rules quietly become "email
-// everything", and the shortlist stops being a shortlist.
+/**
+ * The tool is a watchlist now, not a bargain hunter. One rule decides
+ * everything: is this a PSA 10 autograph, of a man named in
+ * data/my-players.json, asking under the ceiling.
+ *
+ * Nothing else earns an email. Not a 60% discount, not a top-24 dynasty
+ * asset, not a rookie of the exact profile Ryan used to hunt. That is the
+ * point of the change and the assertion that guards it is the one below
+ * called "a screaming bargain of a player you never named earns nothing",
+ * because without it the old behaviour creeps straight back in.
+ */
 
 const row = (over = {}) => ({
   itemId: 'R1', player: 'Some Guy', year: 2024, set: 'prizm', parallel: null,
   grade: 10, exp: 4, age: 26, team: 'CHI', dynRank: 150, dynTrend30: 0, conviction: 1,
-  alwaysAlert: false, askUsd: 300, landedAud: 460, compAud: 500, edge: 0.08,
+  alwaysAlert: false, askUsd: 150, landedAud: 260, compAud: 300, edge: 0.13,
   valueConfidence: 3, score: 0.05, url: 'https://example.invalid', ...over,
 });
-const reasonsFor = (over) => { const r = row(over); return evaluate(r).reasons; };
+// A man on the watchlist, on a card that qualifies.
+const watched = (over = {}) => row({ player: 'Emeka Egbuka', conviction: 1.5, alwaysAlert: true, ...over });
+const reasonsFor = (over) => evaluate(row(over)).reasons;
 const emailFor = (rows) => {
   const sel = selectAlerts(rows);
   return { sel, mail: buildAlert(sel, {}) };
 };
 
-check('a named target is emailed even when the call is bad', () => {
-  const r = row({ player: 'Luther Burden III', conviction: 1.4, alwaysAlert: true, edge: -0.2, landedAud: 600 });
-  const v = evaluate(r);
+check('a watchlist player on a PSA 10 auto under the ceiling is emailed', () => {
+  assert.deepStrictEqual(evaluate(watched()).reasons, ['TARGET'],
+    'the one thing the tool is for did not fire');
+});
+
+check('the card has to be a PSA 10', () => {
+  assert.deepStrictEqual(evaluate(watched({ grade: 9 })).reasons, [],
+    'a PSA 9 was emailed, and the brief says PSA 10 only');
+});
+
+check('the card has to be under the asking ceiling', () => {
+  const max = CFG.alert.reasons.target.maxAskUsd;
+  assert.deepStrictEqual(evaluate(watched({ askUsd: max + 1 })).reasons, [],
+    `a card asking over $${max} was emailed`);
+  assert.deepStrictEqual(evaluate(watched({ askUsd: max })).reasons, ['TARGET'],
+    'a card asking exactly the ceiling was rejected, so the bound is off by one');
+  assert.deepStrictEqual(evaluate(watched({ askUsd: 0 })).reasons, [],
+    'a card with no asking price was emailed, so the ceiling is not being applied');
+});
+
+check('a screaming bargain of a player you never named earns nothing', () => {
+  // Top-24 dynasty, first year, PSA 10, cheap, 60% under the going rate.
+  // Every one of the old rules would have fired. None of them exist now.
+  const bargain = row({
+    player: 'Nobody You Named', exp: 0, dynRank: 8, dynTrend30: 300,
+    askUsd: 90, landedAud: 160, compAud: 400, edge: 0.6, score: 3,
+  });
+  const v = evaluate(bargain);
+  assert.deepStrictEqual(v.reasons, [],
+    `a card qualifying on nothing but being cheap was queued for the email as ${v.call}`);
+  // And it must not be rendered either. A card shown but never marked sent
+  // comes back every single scan, forever.
+  bargain.verdict = v;
+  const { sel } = emailFor([bargain]);
+  const shown = [...sel.act, ...sel.also, ...sel.targets, ...sel.profile, ...sel.unread];
+  assert.strictEqual(shown.length, 0,
+    `a card with no reason was rendered into the email as a ${v.call}, so it will be resent on every scan`);
+});
+
+check('a watchlist card is emailed however bad the price is', () => {
+  const dear = watched({ edge: -0.4, landedAud: 700, compAud: 500, score: -1 });
+  const v = evaluate(dear);
   assert.ok(['PASS', 'SKIP', 'FAIR', 'WATCH'].includes(v.call), `expected a weak call, got ${v.call}`);
-  assert.ok(v.reasons.includes('TARGET'), 'a named target at a bad price was not flagged for the email');
+  assert.ok(v.reasons.includes('TARGET'), 'a watchlist card was dropped for being expensive, and the brief is to hear every time');
 });
 
-check('a named target the tool cannot value is still emailed', () => {
-  // No edge, no comp: this is what a row in the "worth a look" pile looks like.
-  const r = row({ player: 'Emeka Egbuka', conviction: 1.4, alwaysAlert: true, edge: undefined, compAud: undefined, unpriced: 'no-comp-for-player-year' });
-  assert.ok(evaluate(r).reasons.includes('TARGET'),
-    'an unpriced target was dropped, which is the one Ryan most needs to see himself');
+check('a watchlist card the tool cannot value at all is still emailed', () => {
+  assert.ok(evaluate(watched({ edge: undefined, compAud: undefined, unpriced: 'no-comp-for-player-year' })).reasons.includes('TARGET'),
+    'an unpriced card of a named man was dropped, and that is the one Ryan most needs to look at himself');
 });
 
-check('the profile is first or second year, PSA 10, under the asking ceiling', () => {
-  const P = CFG.alert.reasons.profile;
-  assert.ok(reasonsFor({ exp: 0, grade: 10, askUsd: P.maxAskUsd - 1 }).includes('PROFILE'), 'a rookie PSA 10 under the ceiling did not qualify');
-  assert.ok(reasonsFor({ exp: 1, grade: 10, askUsd: P.maxAskUsd - 1 }).includes('PROFILE'), 'a second year PSA 10 under the ceiling did not qualify');
-  assert.ok(!reasonsFor({ exp: 2, grade: 10, askUsd: 100 }).includes('PROFILE'), 'a third year man qualified on profile');
-  assert.ok(!reasonsFor({ exp: 0, grade: 9, askUsd: 100 }).includes('PROFILE'), 'a PSA 9 qualified on profile');
-  assert.ok(!reasonsFor({ exp: 0, grade: 10, askUsd: P.maxAskUsd + 1 }).includes('PROFILE'), 'a card over the asking ceiling qualified on profile');
+check('bargain hunting is off', () => {
+  assert.strictEqual(CFG.alert.reasons.deal.enabled, false, 'DEAL is switched on again');
+  assert.strictEqual(CFG.alert.reasons.profile.enabled, false, 'PROFILE is switched on again');
+  assert.ok(!reasonsFor({ edge: 0.6, dynRank: 5, score: 3 }).includes('DEAL'),
+    'a deal earned an email while dealing is switched off');
+  assert.ok(!reasonsFor({ exp: 0, dynRank: 20, askUsd: 120 }).includes('PROFILE'),
+    'the profile rule fired while it is switched off');
 });
 
-check('the profile never fires on a retired player', () => {
-  // Sleeper reports years_exp 0 for a man who never played and freezes it at
-  // retirement, so data/player-index.json holds Kurt Warner at age 47 exp 0
-  // and 2,775 entries at exp 0 or 1 in total. Experience alone cannot answer
-  // "first or second year", and isBoomRookie only escaped this by also
-  // demanding a dynasty rank inside the top 60.
-  assert.ok(!reasonsFor({ player: 'Kurt Warner', exp: 0, age: 47, team: null, dynRank: null, askUsd: 150 }).includes('PROFILE'),
-    'a retired player qualified as a first or second year man');
-  assert.ok(!reasonsFor({ exp: 1, team: null, dynRank: 40, askUsd: 150 }).includes('PROFILE'),
-    'a player on no roster qualified on profile');
-  assert.ok(!reasonsFor({ exp: 1, team: 'CHI', dynRank: null, askUsd: 150 }).includes('PROFILE'),
-    'a player the dynasty market does not rate at all qualified on profile');
-  assert.ok(reasonsFor({ exp: 1, team: 'CHI', dynRank: 400, askUsd: 150 }).includes('PROFILE'),
-    'a rostered, ranked second year man was rejected, so the guard is too tight');
-});
+/* ---------- the watchlist file itself ---------- */
 
-// The index really does hold these. If Sleeper ever changes shape this fails
-// loudly rather than the profile rule quietly widening again.
-check('the player index still contains the retired men this guard exists for', () => {
+/**
+ * These run against the real data/my-players.json and data/player-index.json,
+ * because the failure they guard is silent: a name that does not resolve is a
+ * player Ryan simply never hears about, and nothing anywhere says so. This is
+ * the test that catches a typo when the 2026 rookies get added.
+ */
+check('every name on the watchlist resolves to a real player', () => {
+  const players = require('./data/my-players.json').rows;
   const idx = require('./data/player-index.json').byName;
-  const warner = (idx['kurt warner'] || [])[0];
-  assert.ok(warner, 'Kurt Warner is missing from the index, so this guard is untested against real data');
-  assert.strictEqual(warner.exp, 0, `expected Sleeper to report exp 0 for a retired player, got ${warner.exp}`);
-  assert.strictEqual(warner.team, null, 'expected no roster for a retired player');
+  const norm = (s) => String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[.'`]/g, '').replace(/\s+(jr|sr|ii|iii|iv|v)$/i, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+
+  assert.ok(players.length, 'the watchlist is empty, so the tool has nothing to look for');
+  const missing = players.filter((p) => !idx[norm(p.player)]).map((p) => p.player);
+  assert.deepStrictEqual(missing, [],
+    `these names match nobody in the player index, so their cards can never be recognised: ${missing.join(', ')}`);
 });
 
-check('an ordinary card that is not a deal earns no email', () => {
-  // Fourth year, unremarkable player, PSA 10, priced at what it is worth.
-  assert.deepStrictEqual(reasonsFor({ exp: 4, askUsd: 300, edge: 0.02, landedAud: 490 }), [],
-    'a card qualifying on nothing was still queued for the email');
+check('every watchlist player is set to alert', () => {
+  const players = require('./data/my-players.json').rows;
+  const silent = players.filter((p) => p.alwaysAlert !== true).map((p) => p.player);
+  assert.deepStrictEqual(silent, [],
+    `on the watchlist but will never be emailed: ${silent.join(', ')}`);
 });
 
-check('a player flagged alwaysAlert is named as one of yours, whatever his conviction', () => {
-  // my-players.json offers the two switches independently and its own note
-  // calls them separate. Setting alwaysAlert with conviction left at 1.0 used
-  // to produce a card that arrived in the targets section carrying no TARGET
-  // tag and no "one of yours" line, so the email never said why it was there.
-  const v = evaluate(row({ conviction: 1.0, alwaysAlert: true, edge: -0.1, landedAud: 500, compAud: 455 }));
-  assert.ok(v.reasons.includes('TARGET'), 'alwaysAlert did not earn the reason');
-  assert.ok(v.tags.includes('TARGET'), 'the card is in the email because he is one of yours, and the email does not say so');
-  assert.ok(/one of your/i.test(v.hook), `the hook does not name him as one of yours: "${v.hook}"`);
+check('the watchlist drives the eBay queries', () => {
+  // A rotation means two runs in three are not looking for a given player,
+  // which is the opposite of noticing when one is listed.
+  const players = require('./data/my-players.json').rows;
+  const qs = watchQueries(players);
+  assert.strictEqual(qs.length, players.length, 'some watchlist players get no eBay query of their own');
+  assert.ok(qs.every((q) => /^psa 10 .+ auto$/.test(q)), `a query is malformed: ${qs.find((q) => !/^psa 10 .+ auto$/.test(q))}`);
+  assert.ok(qs.some((q) => /burden/i.test(q)), 'the primary target has no query');
+  // Suffixes come off, because sellers do not type them consistently.
+  assert.ok(!qs.some((q) => /\biii\b/i.test(q)), 'a suffix survived into a query and will narrow it wrongly');
 
-  // And on the other side of the price fork, where a different line writes it.
-  const cheap = evaluate(row({ conviction: 1.0, alwaysAlert: true, edge: 0.4, landedAud: 300, compAud: 500 }));
-  assert.ok(/one of your/i.test(cheap.hook), `the cheap-card hook does not name him either: "${cheap.hook}"`);
+  // And the whole list has to fit inside one run, or the rotation is back.
+  assert.ok(CFG.scan.queriesPerRun >= players.length,
+    `queriesPerRun is ${CFG.scan.queriesPerRun} against ${players.length} players, so some are searched only every other run`);
+});
+
+check('a scheduled run searches the watchlist, not the old set sweep', () => {
+  const players = require('./data/my-players.json').rows;
+  const scheduled = chooseQueries(players, {});
+  assert.strictEqual(scheduled.length, players.length,
+    'a scheduled run is using the old set-based sweep, which searches for products rather than for your men');
+  assert.ok(scheduled.every((q) => players.some((p) => q.includes(p.player.replace(/\s+III$/, '')))),
+    'the queries are not derived from the watchlist');
+
+  // A full sweep still gets the wide net, for rebuilding comparable pools.
+  assert.ok(chooseQueries(players, { fullSweep: true }).length > players.length,
+    'SCAN_ALL no longer widens the sweep');
+  // And an empty watchlist must not mean an empty scan.
+  assert.ok(chooseQueries([], {}).length > 0, 'an empty watchlist produced a scan that searches for nothing');
+});
+
+check('the watchlist fits inside the eBay budget', () => {
+  const players = require('./data/my-players.json').rows;
+  // 2 marketplaces * (3 aspect pages + queries * 2), at the six-hourly schedule.
+  const perRun = 2 * (3 + players.length * 2);
+  const perDay = perRun * 4;
+  assert.ok(perDay < CFG.scan.dailyBrowseCeiling * 0.5,
+    `${players.length} players costs ${perDay} searches a day against a ${CFG.scan.dailyBrowseCeiling} ceiling. Rotate, or trim the list.`);
+});
+
+/* ---------- the email ---------- */
+
+check('a watchlist card reaches the rendered email', () => {
+  const r = watched({ itemId: 'T1', player: 'Luther Burden III', edge: -0.25, landedAud: 600, compAud: 480 });
+  r.verdict = evaluate(r);
+  const { sel, mail } = emailFor([r]);
+  assert.strictEqual(sel.targets.length, 1, 'it earned a reason but reached no section of the email');
+  assert.ok(mail.text.includes('Luther Burden III'), 'the player is not in the email body');
+  assert.ok(mail.html.includes('Your targets'), 'the section did not render');
+  assert.ok(!/Nothing worth flagging/.test(mail.subject), `subject says nothing was found: "${mail.subject}"`);
+});
+
+check('primaries sort above secondaries', () => {
+  const secondary = watched({ itemId: 'S1', player: 'Mac Jones', conviction: 1.25 });
+  const primary = watched({ itemId: 'P1', player: 'Emeka Egbuka', conviction: 1.5, edge: -0.3, landedAud: 700, compAud: 540 });
+  [secondary, primary].forEach((r) => { r.verdict = evaluate(r); });
+  const { sel } = emailFor([secondary, primary]);
+  assert.strictEqual(sel.targets[0].player, 'Emeka Egbuka',
+    'a secondary outranked a primary, even though the primary is who Ryan actually wants');
+});
+
+check('a section cap never swallows a card that another section would show', () => {
+  const filler = Array.from({ length: 12 }, (_, i) =>
+    watched({ itemId: `F${i}`, player: `Filler ${i}`, edge: 0.5, score: 1 - i * 0.01 }));
+  const target = watched({ itemId: 'TGT', player: 'Emeka Egbuka', edge: 0.25, score: 0.001 });
+  const all = [...filler, target].map((r) => { r.verdict = evaluate(r); return r; });
+  const { sel } = emailFor(all);
+  const displayed = [...sel.act, ...sel.also, ...sel.targets, ...sel.profile].map((r) => r.itemId);
+  assert.ok(displayed.includes('TGT'),
+    'a card was cut by one section cap and then excluded from the next section for being "already shown"');
+});
+
+check('a card appears in exactly one section of the email', () => {
+  const cards = [
+    watched({ itemId: 'X1', player: 'Emeka Egbuka', edge: 0.5, landedAud: 200, compAud: 400, score: 2 }),
+    watched({ itemId: 'X2', player: 'Quinshon Judkins', conviction: 1.25, edge: 0.5, landedAud: 200, compAud: 400, score: 1.5 }),
+    watched({ itemId: 'X3', player: 'Luther Burden III', edge: -0.1, landedAud: 500, compAud: 455, score: -1 }),
+  ];
+  cards.forEach((r) => { r.verdict = evaluate(r); });
+  const { sel } = emailFor(cards);
+  const ids = [...sel.act, ...sel.also, ...sel.targets, ...sel.profile].map((r) => r.itemId);
+  assert.strictEqual(ids.length, new Set(ids).size, `a card was rendered twice: ${ids.join(', ')}`);
+  assert.strictEqual(new Set(ids).size, cards.length, `${cards.length - new Set(ids).size} card(s) vanished entirely`);
+});
+
+check('the email never prints a negative discount as a discount', () => {
+  const r = watched({ itemId: 'O1', edge: -0.25, landedAud: 600, compAud: 480 });
+  r.verdict = evaluate(r);
+  const { mail } = emailFor([r]);
+  assert.ok(!/-\d+% under/.test(mail.text), `printed a negative discount as a discount: ${mail.text.match(/.*under.*/)?.[0]}`);
+  assert.ok(/25% over/.test(mail.text), 'an over-market card is not described as over market');
+});
+
+check('a card priced above the market is never described as cheap', () => {
+  const over = evaluate(watched({ landedAud: 600, compAud: 500, edge: -0.2 }));
+  assert.ok(!/cheap|under|below/i.test(over.hook), `hook called a dear card cheap: "${over.hook}"`);
+  assert.ok(!/cheap|under|below/i.test(over.take), `take called a dear card cheap: "${over.take}"`);
+  const level = evaluate(watched({ landedAud: 500, compAud: 500, edge: 0 }));
+  assert.ok(!/cheap/i.test(level.hook), `hook called a fairly priced card cheap: "${level.hook}"`);
+  const cheap = evaluate(watched({ edge: 0.4, landedAud: 300, compAud: 500 }));
+  assert.ok(/one of your/i.test(cheap.hook), `the cheap-card hook does not name him as one of yours: "${cheap.hook}"`);
+});
+
+check('the strapline does not claim everything is under market when it is not', () => {
+  const t = watched({ itemId: 'T2', edge: -0.3, landedAud: 700, compAud: 540 });
+  t.verdict = evaluate(t);
+  const { mail } = emailFor([t]);
+  assert.ok(!/under what comparable cards ask/.test(mail.html),
+    'the header tells Ryan every card below is under market, on an email whose only card is over it');
+});
+
+check('the subject counts your men, not their listings', () => {
+  const cards = Array.from({ length: 6 }, (_, i) =>
+    watched({ itemId: `M${i}`, player: i % 2 ? 'Luther Burden III' : 'Emeka Egbuka', edge: -0.1, landedAud: 400 + i, compAud: 440, score: -1 }));
+  cards.forEach((r) => { r.verdict = evaluate(r); });
+  const { mail } = emailFor(cards);
+  assert.ok(!/[3-9]\d* of your guys/.test(mail.subject), `subject counted listings as people: "${mail.subject}"`);
+  const h1 = (mail.html.match(/font-size:20px[^>]*>([^<]*)</) || [])[1] || '';
+  assert.ok(!/[3-9]\d* of your guys/.test(h1), `the email heading counted listings as people: "${h1}"`);
 });
 
 check('the same man spelled with and without a suffix is one player, not two', () => {
-  // The Sleeper index stores men without a suffix while sellers type them with
-  // one. Plain lowercasing let the one-card-per-player sections show him twice
-  // and spend two slots on it.
-  const a = row({ itemId: 'S1', player: 'Marvin Harrison Jr.', edge: 0.2, score: 1, dynRank: 30 });
-  const b = row({ itemId: 'S2', player: 'Marvin Harrison', edge: 0.19, score: 0.9, dynRank: 30 });
+  const a = watched({ itemId: 'S1', player: 'Luther Burden Jr.', edge: 0.2, score: 1 });
+  const b = watched({ itemId: 'S2', player: 'Luther Burden', edge: 0.19, score: 0.9 });
   [a, b].forEach((r) => { r.verdict = evaluate(r); });
   const { sel } = emailFor([a, b]);
-  const displayed = [...sel.act, ...sel.also, ...sel.targets, ...sel.profile];
-  assert.strictEqual(displayed.length, 1,
-    `one man appeared ${displayed.length} times because of how the seller spelled his name`);
+  const displayed = [...sel.act, ...sel.also, ...sel.profile];
+  assert.strictEqual(displayed.length, 0, 'the deal sections rendered something while dealing is off');
+  // The targets section deliberately shows every listing, so it is the
+  // one-card-per-player sections that must collapse the two spellings.
+  assert.strictEqual(new Set(sel.targets.map((r) => r.player)).size, 2, 'fixture is wrong');
 });
 
 check('a numbered card says so in the email, even when it cannot be valued', () => {
-  // serialOf was only set on the two priced branches, so a numbered card that
-  // could not be valued reached the email with no mention of its print run.
-  // The one-of-ones are exactly the cards that cannot be valued.
   const parsed = {
     player: 'Emeka Egbuka', year: 2025, set: 'prizm', insert: 'rookie auto', parallel: 'gold',
     cardNo: null, serial: { num: 3, of: 25 }, grade: 10, confidence: 90,
@@ -256,208 +399,64 @@ check('a numbered card says so in the email, even when it cannot be valued', () 
     price: 190, currency: 'USD', shipping: 15, shippingUnknown: false,
     country: 'US', feedbackPct: 99, feedbackScore: 500,
   };
+  setConviction(require('./data/my-players.json').rows);
   const scored = scoreListing(l, parsed, { comp: null, matchConfidence: 0, reason: 'x' }, fx, null);
   assert.strictEqual(scored.serialOf, 25, 'scoreListing did not carry the print run onto an unvalued card');
   scored.verdict = evaluate(scored);
   const { mail } = emailFor([scored]);
-  assert.ok(/\/25/.test(mail.text), `the email does not mention the print run: ${mail.text.split('\n').find((x) => /Prizm/.test(x))}`);
+  assert.ok(/\/25/.test(mail.text), 'the email does not mention the print run');
 });
 
-check('a genuine deal still earns DEAL on its own', () => {
-  // The oldest of the three reasons, and the one every other test takes for
-  // granted by hardcoding reasons: ['DEAL'] into its fixture.
-  assert.ok(reasonsFor({ exp: 4, askUsd: 300, edge: 0.5, landedAud: 250, dynRank: 20 }).includes('DEAL'),
-    'a deep discount on a top-24 player no longer earns an email at all');
-});
+/* ---------- the trip from the real files to a scored listing ---------- */
 
-check('a card priced above the market is never described as cheap', () => {
-  // The hook used to assume everything reaching the email was a bargain,
-  // which was true while only buys were emailed. Targets and profile cards
-  // now arrive at any call. One line claiming a dear card is cheap costs the
-  // credibility of every other line in the email.
-  const over = evaluate(row({ player: 'Luther Burden III', conviction: 1.4, alwaysAlert: true, landedAud: 600, compAud: 500, edge: -0.2 }));
-  assert.ok(!/cheap|under|below/i.test(over.hook), `hook called a dear card cheap: "${over.hook}"`);
-  assert.ok(!/cheap|under|below/i.test(over.take), `take called a dear card cheap: "${over.take}"`);
-
-  const level = evaluate(row({ conviction: 1.4, alwaysAlert: true, landedAud: 500, compAud: 500, edge: 0 }));
-  assert.ok(!/cheap/i.test(level.hook), `hook called a fairly priced card cheap: "${level.hook}"`);
-});
-
-check('the profile does not need a valuation', () => {
-  assert.ok(reasonsFor({ exp: 1, grade: 10, askUsd: 150, edge: undefined, compAud: undefined }).includes('PROFILE'),
-    'a profile card was gated on having a value, which is the opposite of the point');
-});
-
-/* ---------- targets and profile actually reach the email ---------- */
-
-/**
- * Everything above stops at evaluate() and only inspects verdict.reasons.
- * That left the delivery path untested, and it showed: five separate mutations
- * that each destroy the feature all passed a green suite. run.js could stop
- * forwarding unpriced targets, selectAlerts could return empty target and
- * profile buckets, notify could revert to the old bar, score.js could stop
- * carrying alwaysAlert, and alert.js could go back to printing "-9% under".
- *
- * These assertions run a card the whole way to rendered email text.
- */
-
-check('a named target at a bad call reaches the rendered email', () => {
-  const r = row({ itemId: 'T1', player: 'Luther Burden III', conviction: 1.4, alwaysAlert: true, edge: -0.25, landedAud: 600, compAud: 480 });
-  r.verdict = evaluate(r);
-  const { sel, mail } = emailFor([r]);
-  assert.strictEqual(sel.targets.length, 1, 'the target never reached a section of the email');
-  assert.ok(mail.text.includes('Luther Burden III'), 'the target is not in the email body');
-  assert.ok(mail.html.includes('Your targets'), 'the targets section did not render');
-});
-
-check('a profile card reaches the rendered email', () => {
-  const r = row({ itemId: 'P1', player: 'Cam Ward', exp: 0, team: 'TEN', dynRank: 90, askUsd: 150, edge: 0.03, landedAud: 250, compAud: 258 });
-  r.verdict = evaluate(r);
-  const { sel, mail } = emailFor([r]);
-  assert.strictEqual(sel.profile.length, 1, 'the profile card never reached a section of the email');
-  assert.ok(mail.html.includes('Fits your profile'), 'the profile section did not render');
-});
-
-check('a section cap never swallows a card that another section would show', () => {
-  // The exclusion set was built from the uncapped act list and act was then
-  // sliced, so a named target sitting at act position 11 was cut from act,
-  // barred from the targets section for being "already shown", displayed
-  // nowhere, and marked as emailed. The one card the feature exists for.
-  const rows = Array.from({ length: 12 }, (_, i) =>
-    row({ itemId: `S${i}`, player: `Filler ${i}`, edge: 0.5, score: 1 - i * 0.01 }));
-  const target = row({ itemId: 'TGT', player: 'Emeka Egbuka', conviction: 1.4, alwaysAlert: true, edge: 0.25, score: 0.001 });
-  const all = [...rows, target].map((r) => { r.verdict = evaluate(r); return r; });
-
-  const { sel } = emailFor(all);
-  const displayed = [...sel.act, ...sel.also, ...sel.targets, ...sel.profile].map((r) => r.itemId);
-  assert.ok(displayed.includes('TGT'),
-    'a named target was cut by the act cap and then excluded from the targets section, so it is marked sent without ever being shown');
-});
-
-check('the email never prints a negative discount as a discount', () => {
-  // verdict.hook is guarded by its own assertion above. This one guards the
-  // other half, the price line built in alert.js, which CLAUDE.md names as the
-  // second place the word "under" was hardcoded next to the edge.
-  const r = row({ itemId: 'O1', player: 'Emeka Egbuka', conviction: 1.4, alwaysAlert: true, edge: -0.25, landedAud: 600, compAud: 480 });
-  r.verdict = evaluate(r);
-  const { mail } = emailFor([r]);
-  assert.ok(!/-\d+% under/.test(mail.text), `email printed a negative discount as a discount: ${mail.text.match(/.*under.*/)?.[0]}`);
-  assert.ok(/25% over/.test(mail.text), 'an over-market card is not described as over market');
-});
-
-check('the strapline does not claim everything is under market when it is not', () => {
-  const t = row({ itemId: 'T2', player: 'Luther Burden III', conviction: 1.4, alwaysAlert: true, edge: -0.3, landedAud: 700, compAud: 540 });
-  t.verdict = evaluate(t);
-  const { mail } = emailFor([t]);
-  assert.ok(!/under what comparable cards ask/.test(mail.html),
-    'the header still tells Ryan every card below is under market, on an email whose only card is over it');
-});
-
-check('the subject leads with the deals, not with a target at a weak call', () => {
-  const deals = ['Zay Flowers', 'Drake London', 'Bucky Irving'].map((p, i) =>
-    row({ itemId: `D${i}`, player: p, edge: 0.55, score: 2 - i * 0.1 }));
-  const weakTarget = row({ itemId: 'T3', player: 'Luther Burden III', conviction: 1.4, alwaysAlert: true, edge: -0.25, landedAud: 600, compAud: 480, score: -1 });
-  const all = [...deals, weakTarget].map((r) => { r.verdict = evaluate(r); return r; });
-  const { mail } = emailFor(all);
-  assert.ok(!/^Luther Burden III listed/.test(mail.subject),
-    `a target the tool rated badly took the subject line off three strong buys: "${mail.subject}"`);
-});
-
-check('an unpriced target is forwarded to the notifier, an unpriced nobody is not', () => {
-  // run.js used to build this population inline, where it was deletable
-  // without a single assertion noticing.
-  const target = row({ itemId: 'U1', player: 'Emeka Egbuka', conviction: 1.4, alwaysAlert: true, unpriced: 'no-comp-for-player-year', edge: undefined, compAud: undefined });
-  const nobody = row({ itemId: 'U2', player: 'Nobody', exp: 7, dynRank: null, unpriced: 'no-comp-for-player-year', edge: undefined, compAud: undefined });
-  [target, nobody].forEach((r) => { r.verdict = evaluate(r); });
-  const priced = [row({ itemId: 'B1' })];
-  priced.forEach((r) => { r.verdict = evaluate(r); });
-
-  const pop = alertPopulation(priced, [target, nobody]).map((r) => r.itemId);
-  assert.ok(pop.includes('U1'), 'an unpriced named target never reaches the notifier');
-  assert.ok(!pop.includes('U2'), 'the whole unpriced pile is being forwarded, so the email becomes the report');
-  assert.ok(pop.includes('B1'), 'priced rows stopped being forwarded');
-});
-
-/**
- * The one test that touches real files rather than hand-built rows. It proves
- * the chain data/my-players.json -> setConviction -> normPlayer -> scoreListing
- * -> evaluate actually connects, which matters because my-players.json spells
- * him "Luther Burden III" while the Sleeper index stores "Luther Burden", and
- * normPlayer strips the suffix from both ends to make them meet.
- */
-check('alwaysAlert survives the trip from my-players.json to a scored listing', () => {
+check('a watchlist player survives from my-players.json to a scored listing', () => {
   const players = require('./data/my-players.json').rows;
   setConviction(players);
-  const flagged = players.filter((p) => p.alwaysAlert);
-  assert.ok(flagged.length, 'no player in my-players.json is flagged alwaysAlert');
+  const max = CFG.alert.reasons.target.maxAskUsd;
 
-  for (const p of flagged) {
+  for (const p of players.filter((x) => x.alwaysAlert)) {
     const parsed = {
       player: p.player, year: 2025, set: 'prizm', insert: 'rookie auto', parallel: null,
       cardNo: null, serial: null, grade: 10, confidence: 90,
-      pos: 'WR', exp: 1, age: 22, team: 'CHI', debut: 2025, dynRank: 47, dynTrend30: 100,
-      warnings: [],
+      pos: 'WR', exp: 1, age: 22, team: 'CHI', debut: 2025, dynRank: 47, dynTrend30: 100, warnings: [],
     };
     const listing = {
       itemId: `L-${p.player}`, title: 't', url: 'https://example.invalid',
-      price: 300, currency: 'USD', shipping: 20, shippingUnknown: false,
+      price: max - 10, currency: 'USD', shipping: 15, shippingUnknown: false,
       country: 'US', feedbackPct: 99, feedbackScore: 500,
     };
-    const scored = scoreListing(listing, parsed, { comp: null, matchConfidence: 0, reason: 'no-comp-for-player-year' }, fx, null);
+    const scored = scoreListing(listing, parsed, { comp: null, matchConfidence: 0, reason: 'x' }, fx, null);
     assert.strictEqual(scored.alwaysAlert, true, `alwaysAlert did not reach the scored row for ${p.player}`);
+    assert.ok(scored.askUsd > 0, `no asking price derived for ${p.player}`);
     scored.verdict = evaluate(scored);
     assert.ok(scored.verdict.reasons.includes('TARGET'),
-      `${p.player} is flagged alwaysAlert but earns no TARGET reason, so he would never be emailed`);
+      `${p.player} is on the watchlist but earns no email`);
   }
 
-  // Same trip for the profile rule, which needs three fields scoreListing has
-  // to carry onto the row: grade, exp and team, plus askUsd which it derives.
-  // Drop any one of them and PROFILE silently never fires again.
-  const rookie = {
-    player: 'Cam Ward', year: 2025, set: 'prizm', insert: 'rookie auto', parallel: null,
+  // An AUD listing has to be converted before it meets a USD ceiling.
+  const parsed = {
+    player: players[0].player, year: 2025, set: 'prizm', insert: 'rookie auto', parallel: null,
     cardNo: null, serial: null, grade: 10, confidence: 90,
-    pos: 'QB', exp: 0, age: 23, team: 'TEN', debut: 2025, dynRank: 90, dynTrend30: 20,
-    warnings: [],
+    pos: 'WR', exp: 1, age: 22, team: 'TB', debut: 2025, dynRank: 27, dynTrend30: 100, warnings: [],
   };
-  const cheap = {
-    itemId: 'PROF', title: 't', url: 'https://example.invalid',
-    price: 150, currency: 'USD', shipping: 15, shippingUnknown: false,
-    country: 'US', feedbackPct: 99, feedbackScore: 500,
-  };
-  const p = scoreListing(cheap, rookie, { comp: null, matchConfidence: 0, reason: 'no-comp-for-player-year' }, fx, null);
-  assert.ok(p.askUsd > 0, `scoreListing did not derive an asking price in USD, got ${p.askUsd}`);
-  assert.strictEqual(p.team, 'TEN', 'scoreListing is not carrying team, so the rostered guard rejects everyone');
-  p.verdict = evaluate(p);
-  assert.ok(p.verdict.reasons.includes('PROFILE'),
-    'a rostered, ranked, first year PSA 10 asking under the ceiling earned no PROFILE reason');
-
-  // An AU listing priced in AUD has to convert before it is compared with a
-  // USD ceiling, or every Australian card is judged against the wrong number.
-  const auListing = { ...cheap, itemId: 'AU', price: 150 * fx.usdToAud, currency: 'AUD', country: 'AU' };
-  const au = scoreListing(auListing, rookie, { comp: null, matchConfidence: 0, reason: 'x' }, fx, null);
+  const au = scoreListing(
+    { itemId: 'AU', title: 't', url: 'u', price: 150 * fx.usdToAud, currency: 'AUD', shipping: 10, shippingUnknown: false, country: 'AU', feedbackPct: 99, feedbackScore: 500 },
+    parsed, { comp: null, matchConfidence: 0, reason: 'x' }, fx, null);
   assert.ok(Math.abs(au.askUsd - 150) < 1, `an AUD listing was not converted to USD: askUsd ${au.askUsd}`);
-
-  // Sleeper stores him without the suffix, my-players.json with it. If that
-  // ever stops matching, the whole feature silently does nothing.
-  const idx = require('./data/player-index.json').byName;
-  for (const p of flagged) {
-    const bare = String(p.player).replace(/\s+(jr|sr|ii|iii|iv|v)$/i, '').toLowerCase();
-    assert.ok(idx[bare] || idx[String(p.player).toLowerCase()],
-      `${p.player} is in my-players.json but the player index has neither that name nor "${bare}", so no listing will ever resolve to him`);
-  }
+  assert.ok(evaluate(au).reasons.includes('TARGET'), 'an Australian listing of a watchlist player was not emailed');
 });
 
-check('the subject counts your men, not their listings', () => {
-  const cards = Array.from({ length: 6 }, (_, i) =>
-    row({ itemId: `M${i}`, player: i % 2 ? 'Luther Burden III' : 'Emeka Egbuka', conviction: 1.4, alwaysAlert: true, edge: -0.1, landedAud: 400 + i, compAud: 440, score: -1 }));
-  cards.forEach((r) => { r.verdict = evaluate(r); });
-  const { mail } = emailFor(cards);
-  assert.ok(!/[3-9]\d* of your guys/.test(mail.subject),
-    `subject counted listings as people: "${mail.subject}" (only 2 men are named)`);
-  // The email's own heading counts too, and it is a separate line of code.
-  const h1 = (mail.html.match(/font-size:20px[^>]*>([^<]*)</) || [])[1] || '';
-  assert.ok(!/[3-9]\d* of your guys/.test(h1),
-    `the email heading counted listings as people: "${h1}"`);
+check('an unpriced watchlist card is forwarded to the notifier, an unpriced nobody is not', () => {
+  const target = watched({ itemId: 'U1', unpriced: 'no-comp-for-player-year', edge: undefined, compAud: undefined });
+  const nobody = row({ itemId: 'U2', player: 'Nobody', unpriced: 'no-comp-for-player-year', edge: undefined, compAud: undefined });
+  [target, nobody].forEach((r) => { r.verdict = evaluate(r); });
+  const priced = [watched({ itemId: 'B1' })];
+  priced.forEach((r) => { r.verdict = evaluate(r); });
+
+  const pop = alertPopulation(priced, [target, nobody]).map((r) => r.itemId);
+  assert.ok(pop.includes('U1'), 'an unpriced watchlist card never reaches the notifier');
+  assert.ok(!pop.includes('U2'), 'the whole unpriced pile is being forwarded, so the email becomes the report');
+  assert.ok(pop.includes('B1'), 'priced rows stopped being forwarded');
 });
 
 /* ---------- named men the parser could not read ---------- */
@@ -468,17 +467,19 @@ check('the subject counts your men, not their listings', () => {
 const dropped = (over = {}) => ({
   itemId: 'D1', title: '2025 Odd Set Luther Burden III RC Auto PSA 10 GEM MINT',
   url: 'https://example.invalid', player: 'Luther Burden',
-  alwaysAlert: true, warnings: [], dropped: 'parse-confidence-45', ...over,
+  grade: 10, askUsd: 150, alwaysAlert: true, warnings: [], dropped: 'parse-confidence-45', ...over,
 });
 
 check('only the confidence gate produces an unreadable target', () => {
-  assert.ok(unreadTarget(dropped()), 'a target the parser half-read was binned silently');
-  assert.ok(!unreadTarget(dropped({ dropped: 'college-card-2024-vs-debut-2025' })), 'a college card was surfaced, against the brief');
+  assert.ok(unreadTarget(dropped()), 'a watchlist card the parser half-read was binned silently');
+  assert.ok(!unreadTarget(dropped({ dropped: 'college-card-2024-vs-debut-2025' })), 'a college card was surfaced');
   assert.ok(!unreadTarget(dropped({ dropped: 'gate:no-psa-grade-claim' })), 'a raw card was surfaced as a PSA auto');
   assert.ok(!unreadTarget(dropped({ dropped: 'gate:auto-explicitly-denied' })), 'a card whose title denies an autograph was surfaced');
   assert.ok(!unreadTarget(dropped({ dropped: 'gate:junk:lot' })), 'a card lot was surfaced');
   assert.ok(!unreadTarget(dropped({ warnings: ['ambiguous-player'] })), 'a name the parser could not settle was claimed as one of yours');
   assert.ok(!unreadTarget(dropped({ alwaysAlert: false })), 'an unreadable card for a player you never named was surfaced');
+  assert.ok(!unreadTarget(dropped({ grade: 9 })), 'a PSA 9 was surfaced');
+  assert.ok(!unreadTarget(dropped({ askUsd: CFG.alert.reasons.target.maxAskUsd + 50 })), 'a card over the ceiling was surfaced');
 });
 
 check('an unreadable target reaches the email carrying no price and no call', () => {
@@ -491,28 +492,11 @@ check('an unreadable target reaches the email carrying no price and no call', ()
   assert.strictEqual(sel.unread.length, 1, 'it reached the notifier but no section of the email');
   const mail = buildAlert(sel, {});
   assert.ok(mail.text.includes('https://example.invalid'), 'the link is missing, which is the only actionable thing on the row');
-  assert.ok(!/\$/.test(mail.text.split('COULD NOT READ THESE')[1] || ''),
-    'a card with no valuation printed a price');
+  assert.ok(!/\$/.test(mail.text.split('COULD NOT READ THESE')[1] || ''), 'a card with no valuation printed a price');
   assert.ok(!/NaN|undefined/.test(mail.html), 'the rendered card carries NaN or undefined');
   assert.ok(!/Nothing worth flagging/.test(mail.subject), `subject says nothing was found: "${mail.subject}"`);
 });
 
-check('a card appears in exactly one section of the email', () => {
-  // Every section is a different claim about the card. Showing the same
-  // listing under two of them reads as two finds and wastes the cap twice.
-  const cards = [
-    row({ itemId: 'X1', player: 'Emeka Egbuka', conviction: 1.4, alwaysAlert: true, exp: 0, team: 'TB', dynRank: 27, askUsd: 150, edge: 0.5, landedAud: 200, compAud: 400, score: 2 }),
-    row({ itemId: 'X2', player: 'Cam Ward', exp: 0, team: 'TEN', dynRank: 90, askUsd: 150, edge: 0.5, landedAud: 200, compAud: 400, score: 1.5 }),
-    row({ itemId: 'X3', player: 'Luther Burden III', conviction: 1.4, alwaysAlert: true, exp: 1, team: 'CHI', dynRank: 47, askUsd: 190, edge: -0.1, landedAud: 500, compAud: 455, score: -1 }),
-  ];
-  cards.forEach((r) => { r.verdict = evaluate(r); });
-  const { sel } = emailFor(cards);
-  const ids = [...sel.act, ...sel.also, ...sel.targets, ...sel.profile].map((r) => r.itemId);
-  assert.strictEqual(ids.length, new Set(ids).size,
-    `a card was rendered in more than one section: ${ids.join(', ')}`);
-  // And every one of them still got shown somewhere.
-  assert.strictEqual(new Set(ids).size, cards.length, `${cards.length - new Set(ids).size} card(s) vanished entirely`);
-});
 
 /* ---------- alert dedupe ---------- */
 
