@@ -36,9 +36,13 @@ on:
   workflow_dispatch:          # the Run workflow button
     inputs:
       full:
-        description: 'Sweep the full query set instead of one slice'
+        description: 'Sweep the full query set instead of the watchlist'
         type: boolean
-        default: true
+        default: false
+      resend_all:
+        description: 'Catch-up: email everything found, ignoring what has already been sent'
+        type: boolean
+        default: false
 
 concurrency:
   group: psa10-scout
@@ -124,6 +128,11 @@ jobs:
           # Manual runs default to sweeping every query, so the first run
           # and any hand-triggered check covers the whole market at once.
           SCAN_ALL: ${{ (github.event_name == 'workflow_dispatch' && inputs.full) && '1' || '' }}
+          # Catch-up. Emails everything found rather than only what is new, and
+          # lifts the per-section caps so nothing is trimmed, because a trimmed
+          # card is marked sent and never comes back. Hand-fired only: it can
+          # never be set by a schedule or by the Cloudflare trigger.
+          ALERT_RESEND_ALL: ${{ (github.event_name == 'workflow_dispatch' && inputs.resend_all) && '1' || '' }}
         run: node run.js
 
       - name: Save the price history

@@ -84,8 +84,12 @@ function cardName(r) {
  * Sections are exclusive and in that order, so a card appears once, under the
  * strongest reason it qualifies on. Its other reasons still show on the row.
  */
-function selectAlerts(rows) {
-  const A = CFG.alert;
+function selectAlerts(rows, { uncapped = false } = {}) {
+  // A catch-up run shows everything rather than trimming, because a trimmed
+  // card is marked sent and never comes back. See notify.js.
+  const A = uncapped
+    ? { ...CFG.alert, maxPerEmail: Infinity, maxTargets: Infinity, maxProfile: Infinity }
+    : CFG.alert;
   /**
    * Same normalisation the conviction lookup uses, and for the same reason.
    * The Sleeper index stores men without a suffix while sellers type them with
@@ -143,7 +147,7 @@ function selectAlerts(rows) {
     rows.filter((r) => has(r, 'DEAL') && !r.verdict?.shout && r.verdict?.call === 'BUY'
       && !actNames.has(name(r)))
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-  ).slice(0, Math.max(0, Math.min(5, A.maxPerEmail - act.length)));
+  ).slice(0, uncapped ? Infinity : Math.max(0, Math.min(5, A.maxPerEmail - act.length)));
 
   const shown = new Set([...act, ...also].map((r) => r.itemId));
 

@@ -118,7 +118,24 @@ async function notify(buys, { placeholder = false, dryRun = false } = {}) {
   const to = process.env.ALERT_TO || CFG.alert.to;
 
   const sent = loadSent();
-  const news = buys.filter((r) => isNews(r, sent));
+
+  /**
+   * ALERT_RESEND_ALL=1 is the "catch me up" switch, for one run only.
+   *
+   * The normal behaviour is to email a listing once. That is right forever
+   * after, and wrong on the first run of a new watchlist: everything already
+   * sitting on eBay has been there for weeks, none of it is new, and some of
+   * it may be in the sent record from when the tool was hunting bargains.
+   *
+   * With this set, the run ignores what has been sent and shows everything it
+   * finds, uncapped, then marks the lot. The next run is back to normal and
+   * only genuinely new listings arrive. Uncapping matters as much as ignoring
+   * the record: every candidate is marked sent whether or not it fitted the
+   * email, so a capped catch-up run would bin the overflow permanently, which
+   * is the exact opposite of "send me everything".
+   */
+  const resendAll = process.env.ALERT_RESEND_ALL === '1';
+  const news = resendAll ? buys.slice() : buys.filter((r) => isNews(r, sent));
 
   /**
    * Everything that cleared the bar, not just what fits in one email.
@@ -130,7 +147,7 @@ async function notify(buys, { placeholder = false, dryRun = false } = {}) {
    * The cap exists to keep one email readable. It is not a drip feed.
    */
   const candidates = news.filter(worthEmailing);
-  const selection = selectAlerts(news);
+  const selection = selectAlerts(news, { uncapped: resendAll });
   const shown = [...selection.act, ...selection.also, ...selection.targets,
     ...selection.profile, ...selection.unread];
 
