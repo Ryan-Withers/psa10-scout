@@ -1,5 +1,14 @@
 # Working on this project
 
+> **Retired, August 2026.** Ryan called the project finished. The scheduled
+> scan and the repository_dispatch trigger are commented out in
+> `.github/workflows/scan.yml`; nothing fires on its own. Everything below
+> still describes how the tool works and is worth reading before restarting it.
+> The one thing that will surprise you on a restart: `data/alerted.json` on
+> the state branch forgets anything older than 90 days, so a scan after a long
+> gap re-emails cards Ryan has already been shown. Use the catch-up switch
+> deliberately or expect a large first email.
+
 Context for Claude sessions. Ryan is the only user. He is technical, wants
 working code over explanation, and asks for one step at a time.
 

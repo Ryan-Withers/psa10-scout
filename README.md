@@ -1,5 +1,12 @@
 # PSA 10 NFL autograph watchlist
 
+> **Retired, August 2026.** The scan is switched off and nothing runs on a
+> schedule any more. It did its job: the last live run found 94 PSA 10
+> autographs across 14 of the 17 watchlisted players and emailed them in one
+> go. Both automatic triggers are commented out in
+> `.github/workflows/scan.yml`; uncommenting them is all it takes to start it
+> again. The Run workflow button still works for a one-off scan by hand.
+
 Watches eBay Australia and eBay US for PSA 10 autographs of the players you
 name, works out what each one costs landed in Australia, and emails you when
 one is listed.
