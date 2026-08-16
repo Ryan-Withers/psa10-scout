@@ -17,22 +17,23 @@
 
 name: PSA 10 scout
 
+# RETIRED, 2026-08-12. The project is finished and the scan is switched off.
+#
+# Nothing fires on its own any more. Both automatic triggers are commented out
+# rather than deleted, so turning it back on is uncommenting them and nothing
+# else. The Run workflow button still works if you ever want a one-off scan by
+# hand; it costs 74 eBay searches and emails whatever it finds that is new.
+#
+# Before restarting it, check the three things that go stale while it sits
+# idle: the eBay keyset and Resend key still being valid, and data/alerted.json
+# on the state branch, which forgets anything older than 90 days and will
+# therefore re-email cards you have already seen.
 on:
-  schedule:
-    # A backstop, not the clock. GitHub delays scheduled jobs when it is busy
-    # and drops them outright under load, so the every-20-minutes cadence is
-    # driven by the Cloudflare worker in trigger/, which fires on time and
-    # arrives below as repository_dispatch.
-    #
-    # This exists so a dead trigger degrades the tool to four scans a day
-    # instead of silencing it. Kept sparse deliberately: doubling up with the
-    # trigger would spend eBay's daily search budget twice over.
-    - cron: '23 */6 * * *'
-  # Fired by the optional Cloudflare trigger worker (trigger/), which is a
-  # punctual clock. Runs arriving this way start in seconds instead of
-  # queueing behind everyone's scheduled crons.
-  repository_dispatch:
-    types: [scan]
+  # schedule:
+  #   - cron: '23 */6 * * *'
+  #
+  # repository_dispatch:
+  #   types: [scan]
   workflow_dispatch:          # the Run workflow button
     inputs:
       full:
